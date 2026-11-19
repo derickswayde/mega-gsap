@@ -28,3 +28,14 @@ Smooth scroll (Lenis) and scroll reveals (GSAP) for the Mega Lumos Webflow site.
 - On scroll, per section (picked up from Lumos classes): heading lines + paragraph fade, image wipes (away from their text), card wipes (`CONFIG.cards`), accordion row wipes, background panel wipe.
 - `data-motion="off"` opts any element out; `data-motion="wipe-left"` / `"wipe-right"` overrides an image wipe.
 - `window.megaMotion.lenis` for debugging.
+
+## Company card logo reveals (`logo-reveals/`)
+
+Ported from the Mega Studio's Logo Animator (the approved Brand Hub motion), same numbers and maths; GSAP runs the clock.
+
+- `init.js` finds every `[data-logo-reveal]` (Card Company's **Logo Animation** prop), builds that brand's timeline once, and plays it on `pointerenter` and `focusin`. Nothing under `prefers-reduced-motion`. Unknown or empty values are skipped.
+- One file per brand registers on `window.megaLogoReveals.brands`: `bondwright.js` (1.38 s). Copson, Glyph and Manta to follow.
+- Each brand draws its construction pieces into the logo SVG's empty `<g data-logo-build>`, hides `<g data-logo-mark>` while it plays and shows it again at the end. The letters never move. The SVG in Webflow doesn't change.
+- Loaded in one request with jsDelivr's `combine` (see `webflow-body.html`), pinned by commit.
+- `window.megaLogoReveals.reveals` for debugging (`reveals[0].timeline.pause(0.6, false)` shows a pose).
+- Adding a company = one new brand file plus its name in the combine URL.
