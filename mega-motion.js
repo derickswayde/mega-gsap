@@ -348,6 +348,9 @@
     // The clip reaches 1em past the sides and bottom: trimmed text (Lumos text-box trim) hangs its
     // descenders just outside the card, and a flush clip would cut them until the wipe ends.
     gsap.set(cards, { clipPath: "inset(30% -1em -1em -1em)", y: small ? 25 : 60, scale: small ? 1 : 0.96 });
+    // Hand-off: anything that waits for a card (e.g. the company logo reveals) checks data-wipe and
+    // can listen for "mega:wiped" on the card. "done" is set per card as its own wipe ends.
+    cards.forEach(function (c) { c.setAttribute("data-wipe", "pending"); });
     if (imgs.length) gsap.set(imgs, { scale: 1.15 });
     var tl = gsap.timeline({ paused: true });
     tl.to(cards, {
@@ -356,7 +359,14 @@
       scale: 1,
       duration: dur,
       ease: "power3.out",
-      stagger: stagger,
+      stagger: {
+        each: stagger,
+        onComplete: function () {
+          var card = this.targets()[0];
+          card.setAttribute("data-wipe", "done");
+          card.dispatchEvent(new CustomEvent("mega:wiped", { bubbles: true }));
+        },
+      },
       clearProps: "clipPath,transform",
     }, 0);
     if (imgs.length) tl.to(imgs, { scale: 1, duration: dur + 0.3, ease: "power3.out", stagger: stagger, clearProps: "transform" }, 0);

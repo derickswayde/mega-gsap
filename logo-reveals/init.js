@@ -2,6 +2,7 @@
  * Mega logo reveals: loader
  * Finds every [data-logo-reveal] card (set by Card Company's "Logo Animation" prop), builds that brand's
  * timeline once, and plays it on hover and keyboard focus. Nothing plays under prefers-reduced-motion.
+ * Waits for the card wipe: while a card is data-wipe="pending" (set by mega-motion.js), hover does nothing.
  * Brand files (bondwright.js, …) register themselves on window.megaLogoReveals.brands; load them before or
  * after this file, as long as all are in the footer. Unknown or empty values are skipped quietly.
  */
@@ -30,7 +31,13 @@
         reveal.brand = name;
         registry.reveals.push(reveal); // window.megaLogoReveals.reveals, for debugging
 
-        var play = function () { reveal.timeline.restart(); };
+        // prepare(): optional per-brand setup that needs the card on screen (e.g. measuring with getBBox).
+        // Cards that wipe in (mega-motion.js) are data-wipe="pending" until their wipe ends; no reveal before then.
+        var play = function () {
+          if (card.getAttribute("data-wipe") === "pending") return;
+          if (reveal.prepare) reveal.prepare();
+          reveal.timeline.restart();
+        };
         card.addEventListener("pointerenter", play);
         card.addEventListener("focusin", play);
         built.push(function () {
