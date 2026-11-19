@@ -26,6 +26,9 @@
 
         var reveal = brand.build(mark.ownerSVGElement);
         if (!reveal) return;
+        // Reveals draw outside the logo's viewBox (Copson's Cs start spread out; the Studio draws into an overlay
+        // 4x the logo's height), so the SVG must not clip. The static logo sits inside its viewBox, so this is safe.
+        mark.ownerSVGElement.style.overflow = "visible";
 
         reveal.card = card;
         reveal.brand = name;

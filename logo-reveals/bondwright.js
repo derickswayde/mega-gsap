@@ -101,11 +101,10 @@
     var bar = el("line", Object.assign({ "stroke-width": BAR.width }, stroke), camera);
     var ring = el("circle", Object.assign({ cx: RING.cx, cy: RING.cy }, stroke), camera);
 
-    // The ring overshoots its final size, so let it draw past the viewBox while it plays.
+    // The ring overshoots its final size; init.js lets the SVG draw past its viewBox.
     function playing(on) {
       mark.style.visibility = on ? "hidden" : "";
       group.style.display = on ? "" : "none";
-      svg.style.overflow = on ? "visible" : "";
     }
     playing(false);
 
