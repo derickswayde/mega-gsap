@@ -9,6 +9,20 @@
 (function () {
   "use strict";
 
+  var registry = (window.megaLogoReveals = window.megaLogoReveals || { brands: {} });
+
+  // Fit a brand's drawing onto the static mark the way the Studio fits its overlay: the drawing's box (as rendered
+  // now, normally the settled pose) is scaled to the mark's height and placed on its top-left corner.
+  // Returns false if the card isn't rendered yet (zero-size box), so the brand can try again next time.
+  registry.fit = function (space, mark) {
+    space.removeAttribute("transform");
+    var b = space.getBBox(), m = mark.getBBox();
+    if (!b.height || !m.height) return false;
+    var s = m.height / b.height;
+    space.setAttribute("transform", "matrix(" + [s, 0, 0, s, m.x - b.x * s, m.y - b.y * s].map(function (v) { return +v.toFixed(4); }).join(" ") + ")");
+    return true;
+  };
+
   function start() {
     var registry = window.megaLogoReveals;
     if (!window.gsap || !registry) return;
