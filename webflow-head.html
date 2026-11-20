@@ -19,7 +19,7 @@
      Keep these selectors in step with the script (SECTIONS, CARDS); add project ones pass by pass. */
   @keyframes mega-motion-fallback { to { visibility: visible; } }
   html.mega-motion:not(.mega-motion-ready) .nav_component,
-  html.mega-motion:not(.mega-motion-ready) main > section :is(.u-heading, .u-text, .u-image-wrapper:not(.u-background-slot *), .accordion_item, .card_primary_wrap) {
+  html.mega-motion:not(.mega-motion-ready) main > section:first-child :is(.hero_art_img, .u-icon, .u-text, .u-button-wrapper) {
     visibility: hidden;
     animation: mega-motion-fallback 0s 3s forwards;
   }
