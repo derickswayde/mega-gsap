@@ -42,3 +42,11 @@ Ported from the Mega Studio's Logo Animator (the approved Brand Hub motion), sam
 - Loaded in one request with jsDelivr's `combine` (see `webflow-body.html`), pinned by commit.
 - `window.megaLogoReveals.reveals` for debugging (`reveals[0].timeline.pause(0.6, false)` shows a pose).
 - Adding a company = one new brand file plus its name in the combine URL.
+
+## Hero cube (`cube/cube.js`)
+
+- Desktop only (hover + fine pointer, WebGL2, no reduced motion): `mega-motion.js` lazy-loads `cube/cube(.min).js` from the same pinned commit once the hero art has landed. It imports Three.js 0.187.0 from jsDelivr (pinned) and renders the designer's GLTF (geometry embedded, 112 vertices) in a canvas laid exactly over `.hero_art_img`, then fades in over it and hides the still.
+- Pose: orthographic camera fitted to the designer's render (yaw −27.25°, pitch −15.5°); framed where `mega-hero-3d.webp` has the shape. The same fade as the still is applied as a mask image.
+- Pointer anywhere in the window turns the cube (±8° / ±5°) with a soft lag, and the key light slides with it; a slow idle drift keeps it alive. Renders only while the hero is on screen.
+- Tuning: `settings` at the top of `cube.js`, or live in the console via `window.megaCube.settings`.
+- Touch: no cube; the still tilts back gently as the hero scrolls away (ScrollTrigger scrub in `mega-motion.js`).

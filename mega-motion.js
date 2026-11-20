@@ -25,6 +25,11 @@
   var root = document.documentElement;
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // Where this script was loaded from (the same pinned commit), for its lazy-loaded parts (cube/).
+  var SCRIPT = (document.currentScript && document.currentScript.src) || "";
+  var BASE = SCRIPT.replace(/[^/]*$/, "");
+  var MIN = /\.min\.js(\?|$)/.test(SCRIPT) ? ".min" : "";
+
   // Shown once the script has run, so the head code's fallback timer isn't needed.
   function markReady() {
     root.classList.add(CONFIG.name + "-motion-ready");
@@ -254,6 +259,9 @@
   // Nav slides in; the cube rises and fades in slowly; the logo lifts out of a mask;
   // the intro lines rise; the button fades up.
   // ─────────────────────────────────────────────
+  var heroArtLanded;
+  var heroArt = new Promise(function (resolve) { heroArtLanded = resolve; });
+
   function hero(nav) {
     var section = document.querySelector("main > section:first-child");
     var tl = gsap.timeline();
@@ -280,15 +288,59 @@
     // Never schedule into the past if a wait ran long.
     var at = function (t) { return Math.max(t, tl.time()); };
 
-    // The cube waits until it can paint (at most 0.8s).
+    // The cube waits until it can paint (at most 0.8s). heroArt resolves when it has landed,
+    // so the live cube and the phone scroll tilt start from its resting place.
     if (art) imageReady(art, 800).then(function () {
-      tl.to(art, { autoAlpha: 1, y: 0, duration: small ? 1.4 : 2, ease: EASE, clearProps: "opacity,visibility,transform" }, at(0.1));
+      tl.to(art, { autoAlpha: 1, y: 0, duration: small ? 1.4 : 2, ease: EASE, clearProps: "opacity,visibility,transform", onComplete: heroArtLanded }, at(0.1));
     });
+    else heroArtLanded();
 
     if (logo) tl.to(logo, { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.8 : 1.1, ease: "power3.out", clearProps: "clipPath,transform" }, 0.35);
 
     if (text) tl.to(text, { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.8 : 1.1, ease: "power3.out", clearProps: "clipPath,transform" }, 0.55);
     if (button) tl.to(button, { autoAlpha: 1, y: 0, duration: small ? 0.5 : 0.8, ease: "power3.out", clearProps: "transform,opacity,visibility" }, 0.9);
+  }
+
+  // ─────────────────────────────────────────────
+  // Hero cube.
+  // Desktop (fine pointer, WebGL): the designer's 3D M is rendered live (cube/cube.js, Three.js, loaded only here)
+  // and turns with the pointer; it takes over from the still image once the hero has landed.
+  // Touch: no hover, so the still image tilts back gently as the hero scrolls away.
+  // ─────────────────────────────────────────────
+  function webgl() {
+    try {
+      var c = document.createElement("canvas");
+      return !!(window.WebGL2RenderingContext && c.getContext("webgl2"));
+    } catch (e) { return false; }
+  }
+
+  function heroCube() {
+    var section = document.querySelector("main > section:first-child");
+    var img = section && section.querySelector(".hero_art_img");
+    if (!on(img) || !BASE) return;
+    var desktop = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+    if (desktop && webgl()) {
+      heroArt.then(function () {
+        return import(BASE + "cube/cube" + MIN + ".js");
+      }).then(function (cube) {
+        return cube.start({ image: img });
+      }).catch(function (e) {
+        // The still image stays; nothing else depends on the cube.
+        console.warn("[" + CONFIG.name + "-motion] cube", e);
+      });
+      return;
+    }
+
+    if (desktop || !window.ScrollTrigger) return;
+    heroArt.then(function () {
+      // GSAP folds the class's translate(-50%) into its transform; keep it a percentage so it stays centred on rotate.
+      gsap.set(img, { x: 0, xPercent: -50, transformPerspective: 900, transformOrigin: "50% 30%" });
+      gsap.to(img, {
+        rotateX: 10, rotateY: -4, y: -30, ease: "none",
+        scrollTrigger: { trigger: section, start: "top top", end: "bottom top", scrub: 0.8 },
+      });
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -490,6 +542,9 @@
         // Never leave the nav or hero hidden if something goes wrong.
         gsap.set(".nav_component, main > section:first-child, main > section:first-child *", { clearProps: "all" });
         console.error("[" + CONFIG.name + "-motion] hero", e);
+      }
+      try { heroCube(); } catch (e) {
+        console.error("[" + CONFIG.name + "-motion] cube", e);
       }
       sections();
     }
