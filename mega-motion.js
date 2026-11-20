@@ -274,7 +274,8 @@
     if (!on(art)) art = null;
     var icon = pick(".u-icon");
     var logo = icon ? icon.parentElement : null;  // the Logo component's wrapper
-    var text = pick(".u-text");
+    // The intro: a Typography Paragraph (.u-text) or, as the page H1, a Typography Heading (.u-heading).
+    var text = pick(".u-text") || pick(".u-heading");
     var button = pick(".u-button-wrapper");
 
     // Starting states, set before the reveal guard lifts.
