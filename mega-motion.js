@@ -666,8 +666,8 @@
 
   // ─────────────────────────────────────────────
   // Footer wordmark pixel knockout, the quiet version (Derick, 20 November 2026: the first cut felt "gamey").
-  // The wordmark dissolves on its own block grid around the pointer (a cell is half an M step: 2.381 of the
-  // logo's 92 × 20 units, about 35px at 1440). A soft brush: the cell under the pointer clears, its neighbours
+  // The wordmark dissolves on its own block grid around the pointer (a cell is a third of an M step: 1.587 of
+  // the logo's 92 × 20 units, about 23px at 1440). A soft brush: the cell under the pointer clears, its neighbours
   // only partly, falling off with distance. Cells fade out quickly and settle back slowly on a soft ease, and the
   // brush trails the pointer with a little lag (like the hero puff), so the trail flows rather than twitches.
   // Done inside the SVG with a <mask> (white = letters shown, darker grey cells = more cleared). Fine pointers only;
@@ -675,8 +675,8 @@
   // wordmark has built. Reduced motion: nothing (whole script is off).
   // ─────────────────────────────────────────────
   var knock = {
-    cell: 4.76217 / 2,  // logo units: half an M step
-    radius: 1.6,        // brush reach in cells; strength falls off with distance
+    cell: 4.76217 / 3,  // logo units: a third of an M step (about 23px at 1440; was half a step, 35px)
+    radius: 2.4,        // brush reach in cells (same size on screen as 1.6 half-step cells); strength falls off with distance
     peak: 1,            // strength at the brush centre (1 = fully cleared)
     floor: 0.08,        // cells fainter than this aren't touched
     follow: 0.16,       // how quickly the brush catches the pointer each frame (lower = smoother, more lag)
@@ -685,7 +685,7 @@
     jitter: 0.12,       // extra random hold, so cells settle back one by one, gently
     heal: 1.2,          // seconds for a cell to settle back
     sweep: 0.5,         // touch: strength of the diagonal pass
-    sweepStep: 0.05,    // touch: seconds between columns (about 2s across the wordmark)
+    sweepStep: 0.034,   // touch: seconds between columns (about 2s across the wordmark)
     sweepHeal: 0.4,     // touch: seconds for each cell to settle back (short, so the pass travels as a narrow band)
   };
   var knockId = 0;
