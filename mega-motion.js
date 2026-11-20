@@ -590,6 +590,78 @@
   }
 
   // ─────────────────────────────────────────────
+  // Footer (on scroll): the two column rules draw in from the left; the headline rises line by line; the
+  // button and the links step in after it. The wordmark has its own trigger: its four letters rise out of the
+  // logo's own bounds (the SVG clips them), M first, A last, then the copyright line fades up.
+  // ─────────────────────────────────────────────
+  function drawRule(wrap) {
+    var cs = getComputedStyle(wrap);
+    var width = parseFloat(cs.borderTopWidth) || 0;
+    if (!width || cs.borderTopStyle === "none") return null;
+    var setPos = cs.position === "static";
+    if (setPos) wrap.style.position = "relative";
+    var line = document.createElement("div");
+    line.setAttribute("aria-hidden", "true");
+    Object.assign(line.style, { position: "absolute", left: "0", right: "0", top: -width + "px", height: width + "px", background: cs.borderTopColor, transformOrigin: "0 50%", pointerEvents: "none" });
+    wrap.appendChild(line);
+    wrap.style.borderTopColor = "transparent";
+    gsap.set(line, { scaleX: 0 });
+    return {
+      line: line,
+      restore: function () { line.remove(); wrap.style.borderTopColor = ""; if (setPos) wrap.style.position = ""; },
+    };
+  }
+
+  function footer() {
+    var wrap = document.querySelector(".footer_wrap");
+    if (!on(wrap) || !window.ScrollTrigger) return;
+    var draw = small ? 0.7 : 1.0;
+
+    // CTA and links
+    var layout = wrap.querySelector(".footer_layout");
+    if (on(layout)) {
+      var rules = [];
+      var tl = gsap.timeline({ paused: true, onComplete: function () { rules.forEach(function (r) { r.restore(); }); } });
+      [".footer_content", ".footer_links"].forEach(function (sel, i) {
+        var col = layout.querySelector(sel);
+        var r = col && on(col) ? drawRule(col) : null;
+        if (r) { rules.push(r); tl.to(r.line, { scaleX: 1, duration: draw, ease: EASE }, i * 0.12); }
+      });
+      var heads = Array.prototype.filter.call(layout.querySelectorAll(".footer_content_top .u-heading"), on);
+      heads.forEach(function (h, i) {
+        var el = h.firstElementChild || h;
+        gsap.set(el, { autoAlpha: 0 });
+        tl.add(function () { fontsReady().then(function () { lineReveal(el, { duration: small ? 0.55 : 0.8 }); }); }, 0.15 + i * 0.15);
+      });
+      var button = layout.querySelector(".footer_content > .button_main_wrap");
+      if (on(button)) tl.to(button, fadeUp(button), 0.5);
+      Array.prototype.filter.call(layout.querySelectorAll(".footer_group_item"), on).forEach(function (item, i) {
+        tl.to(item, fadeUp(item), 0.3 + i * (small ? 0.06 : 0.08));
+      });
+      onScroll(layout, tl, reveal.cardStart);
+    }
+
+    // Wordmark builds, then the copyright line
+    var logo = wrap.querySelector(".footer_logo_wrap");
+    var letters = on(logo) ? Array.prototype.slice.call(logo.querySelectorAll("svg path")) : [];
+    var bottom = wrap.querySelector(".footer_bottom_text");
+    if (letters.length || on(bottom)) {
+      var tl2 = gsap.timeline({ paused: true });
+      if (letters.length) {
+        var svg = letters[0].ownerSVGElement;
+        var vb = svg.viewBox && svg.viewBox.baseVal;
+        var travel = vb && vb.height ? vb.height * 1.05 : 24;
+        // The letters sit in SVG units: move each a full logo height below the viewBox, which the SVG clips.
+        gsap.set(svg, { overflow: "hidden" });
+        gsap.set(letters, { y: travel });
+        tl2.to(letters, { y: 0, duration: small ? 0.9 : 1.2, ease: EASE, stagger: small ? 0.08 : 0.11, clearProps: "transform" }, 0);
+      }
+      if (on(bottom)) tl2.to(bottom, fadeUp(bottom), letters.length ? 0.6 : 0);
+      onScroll(logo || bottom, tl2, reveal.cardStart);
+    }
+  }
+
+  // ─────────────────────────────────────────────
   // Section reveals (on scroll), shared by every section.
   // Picked up from the Lumos classes already on the page; data-motion="off" opts out.
   // ─────────────────────────────────────────────
@@ -812,6 +884,11 @@
         document.querySelectorAll(".form_element.is-contact .form_field").forEach(function (f) { f.style.borderColor = ""; });
         document.querySelectorAll(".form_element.is-contact svg[aria-hidden]").forEach(function (s) { s.remove(); });
         console.error("[" + CONFIG.name + "-motion] contact", e);
+      }
+      try { footer(); } catch (e) {
+        gsap.set(".footer_wrap, .footer_wrap *", { clearProps: "all" });
+        document.querySelectorAll(".footer_content, .footer_links").forEach(function (c) { c.style.borderTopColor = ""; c.style.position = ""; });
+        console.error("[" + CONFIG.name + "-motion] footer", e);
       }
       sections();
     }
