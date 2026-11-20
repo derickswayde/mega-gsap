@@ -341,20 +341,6 @@
   // the right column leading, so the moving edge is the M's own staircase (low left, high right).
   // Returns a paused tween. Rounded corners come from the element's children, so the polygon is safe.
   // ─────────────────────────────────────────────
-  // Resolves the first time the page has been scrolled past `reveal.scrollIn` of the viewport height.
-  function scrolledPast(fraction) {
-    return new Promise(function (resolve) {
-      function check() {
-        if (window.scrollY > window.innerHeight * fraction) {
-          window.removeEventListener("scroll", check);
-          resolve();
-        }
-      }
-      window.addEventListener("scroll", check, { passive: true });
-      check();
-    });
-  }
-
   function stepClip(t) {
     // t runs 0 → 1 + 2/3. Column i (0 = left) has risen t − (2 − i)/3 of the height.
     var h = [0, 1, 2].map(function (i) { return Math.max(0, Math.min(1, t - (2 - i) / 3)); });
@@ -408,7 +394,8 @@
       if (row) row.cards.push(c); else rows.push({ top: top, cards: [c] });
     });
 
-    var scrolledIn = scrolledPast(reveal.scrollIn);
+    // Cards already in view start shortly after load, alongside the hero (client feedback: no waiting for a scroll).
+    var due = new Promise(function (r) { setTimeout(r, reveal.cardsAfter * 1000); });
     rows.forEach(function (row) {
       row.cards.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
       var tl = gsap.timeline({ paused: true });
@@ -423,9 +410,7 @@
         });
         tl.add(function () { w.play(); }, 0);
       });
-      // A row only plays once the visitor has scrolled a little (and the hero has landed),
-      // so cards already in view on load wait for the first scroll instead of playing on their own.
-      onScroll(row.cards[0], { play: function () { Promise.all([heroArt, scrolledIn]).then(function () { tl.play(); }); } }, reveal.cardStart);
+      onScroll(row.cards[0], { play: function () { due.then(function () { tl.play(); }); } }, reveal.cardStart);
     });
   }
 
@@ -978,7 +963,7 @@
   var reveal = {
     start: small ? "top 95%" : "top 90%",      // headings, text and images
     cardStart: small ? "top 90%" : "top 85%",  // card groups
-    scrollIn: 0.12,                            // company cards wait until the page has been scrolled this much (× viewport height)
+    cardsAfter: small ? 0.6 : 0.8,             // seconds after load before company cards already in view wipe in
   };
 
   // Plays a timeline once when `trigger` reaches the start line.
