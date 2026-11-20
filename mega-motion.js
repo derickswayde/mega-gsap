@@ -280,7 +280,8 @@
 
     // Starting states, set before the reveal guard lifts.
     if (art) gsap.set(art, { autoAlpha: 0, y: small ? 24 : 48 });
-    if (logo) gsap.set(logo, { clipPath: "inset(-10% -5% 100% -5%)", y: small ? 12 : 24 });
+    // The logo builds like the holding page (megarisk.com): see logoBuild().
+    var build = logo ? logoBuild(logo.querySelector("svg")) : null;
     // The intro rises as one block from a mask: a line split would break the balanced wrap
     // (u-text-wrap-balance) and the lines would jump when the split is undone.
     if (text) gsap.set(text, { clipPath: "inset(-10% -5% 100% -5%)", y: small ? 12 : 20 });
@@ -296,10 +297,67 @@
     });
     else heroArtLanded();
 
-    if (logo) tl.to(logo, { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.8 : 1.1, ease: "power3.out", clearProps: "clipPath,transform" }, 0.35);
+    // The intro follows the logo as on the holding page: it rises 60% of the way into the EGA wipe.
+    var LOGO_AT = 0.15, introAt = build ? LOGO_AT + build.introAt : 0.55;
+    if (build) tl.add(build.tl, LOGO_AT);
 
-    if (text) tl.to(text, { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.8 : 1.1, ease: "power3.out", clearProps: "clipPath,transform" }, 0.55);
-    if (button) tl.to(button, { autoAlpha: 1, y: 0, duration: small ? 0.5 : 0.8, ease: "power3.out", clearProps: "transform,opacity,visibility" }, 0.9);
+    if (text) tl.to(text, { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.8 : 1.1, ease: "power3.out", clearProps: "clipPath,transform" }, introAt);
+    if (button) tl.to(button, { autoAlpha: 1, y: 0, duration: small ? 0.5 : 0.8, ease: "power3.out", clearProps: "transform,opacity,visibility" }, introAt + 0.3);
+  }
+
+  // Hero logo build, ported from the holding page on megarisk.com (client request, round 2) with its exact
+  // numbers. The M's three blocks rise from the baseline in turn, then the middle and last blocks' steps
+  // wipe left to meet the block before, while E, G and A wipe in left to right. The holding page draws
+  // the logo at 552 × 120; the Webflow logo is the same artwork at 92 × 20, so the clip shapes keep the
+  // holding page's numbers and are scaled by 1/6. Clips are removed at the end for crisp edges.
+  // Returns { tl, introAt } or null if the SVG isn't the four-path MEGA logo.
+  function logoBuild(svg) {
+    var paths = svg ? svg.querySelectorAll("path") : [];
+    if (paths.length !== 4) return null;
+    var NS = "http://www.w3.org/2000/svg";
+    var id = "mega-logo-build-" + Math.random().toString(36).slice(2, 7);
+    var defs = document.createElementNS(NS, "defs");
+    function clip(name, rects) {
+      var c = document.createElementNS(NS, "clipPath");
+      c.setAttribute("id", id + "-" + name);
+      c.setAttribute("transform", "scale(" + 1 / 6 + ")");
+      rects.forEach(function (r) {
+        var el = document.createElementNS(NS, "rect");
+        Object.keys(r).forEach(function (k) { el.setAttribute(k, r[k]); });
+        c.appendChild(el);
+        r.el = el;
+      });
+      defs.appendChild(c);
+      return "url(#" + id + "-" + name + ")";
+    }
+    // Holding page: "up" rects rise from the baseline (y 120) to `to`; "left" rects grow leftwards from x `from` to `to`.
+    var up1 = { x: -1, width: 44.4, y: 120, height: 0 };
+    var up2 = { x: 56.958, width: 43.4, y: 120, height: 0 };
+    var left2 = { x: 57.46, width: 0, y: 20, height: 37.646 };
+    var up3 = { x: 113.916, width: 41, y: 120, height: 0 };
+    var left3 = { x: 114.416, width: 0, y: -1, height: 30.073 };
+    var wipe = { x: 160, y: 0, width: 0, height: 120 };
+    var mClip = clip("m", [up1, up2, left2, up3, left3]);
+    var egaClip = clip("ega", [wipe]);
+    svg.insertBefore(defs, svg.firstChild);
+    paths[0].setAttribute("clip-path", mClip);
+    for (var i = 1; i < 4; i++) paths[i].setAttribute("clip-path", egaClip);
+
+    // Holding page timings (ms → s) and eases: easeOutCubic = power2.out, easeInOutSine = sine.inOut,
+    // easeInOutCubic = power2.inOut.
+    var STEPS = 1.12, tl = gsap.timeline({
+      onComplete: function () {
+        for (var j = 0; j < 4; j++) paths[j].removeAttribute("clip-path");
+        defs.remove();
+      },
+    });
+    tl.to(up1.el, { attr: { y: 57.146, height: 120 - 57.146 }, duration: 0.44, ease: "power2.out" }, 0.2);
+    tl.to(up2.el, { attr: { y: 28.573, height: 120 - 28.573 }, duration: 0.46, ease: "power2.out" }, 0.42);
+    tl.to(up3.el, { attr: { y: 0, height: 120 }, duration: 0.48, ease: "power2.out" }, 0.64);
+    tl.to(left2.el, { attr: { x: 28.479, width: 57.46 - 28.479 }, duration: 0.52, ease: "sine.inOut" }, STEPS);
+    tl.to(left3.el, { attr: { x: 85.437, width: 114.416 - 85.437 }, duration: 0.52, ease: "sine.inOut" }, STEPS);
+    tl.to(wipe.el, { attr: { width: 392 }, duration: 0.75, ease: "power2.inOut" }, STEPS);
+    return { tl: tl, introAt: STEPS + 0.75 * 0.6 };
   }
 
   // ─────────────────────────────────────────────
@@ -379,39 +437,26 @@
   }
 
   // ─────────────────────────────────────────────
-  // Companies: each row of company cards wipes in together (straight edge, bottom up) as it arrives;
+  // Companies: all company cards wipe in together (straight edge, bottom up) shortly after load;
   // then the card's logo reveal is allowed (logo-reveals/init.js waits for data-wipe).
   // ─────────────────────────────────────────────
   function companies() {
     var cards = Array.prototype.filter.call(document.querySelectorAll(".card_company_wrap"), on);
     if (!cards.length || !window.ScrollTrigger) return;
 
-    // Rows by their top edge (a 2 × 2 grid on desktop, one per row on phones).
-    var rows = [];
-    cards.forEach(function (c) {
-      var top = Math.round(c.getBoundingClientRect().top + window.scrollY);
-      var row = rows.find(function (r) { return Math.abs(r.top - top) < 8; });
-      if (row) row.cards.push(c); else rows.push({ top: top, cards: [c] });
-    });
-
-    // Cards already in view start shortly after load, alongside the hero (client feedback: no waiting for a scroll).
-    var due = new Promise(function (r) { setTimeout(r, reveal.cardsAfter * 1000); });
-    rows.forEach(function (row) {
-      row.cards.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
-      var tl = gsap.timeline({ paused: true });
-      // The row arrives together: one straight wipe per card, all at once.
-      row.cards.forEach(function (card) {
-        card.setAttribute("data-wipe", "pending");
-        var w = straightWipe(card, {
-          done: function () {
-            card.setAttribute("data-wipe", "done");
-            card.dispatchEvent(new CustomEvent("mega:wiped", { bubbles: true }));
-          },
-        });
-        tl.add(function () { w.play(); }, 0);
+    // All four cards arrive together shortly after load, alongside the hero, whether or not they are in view
+    // (client feedback round 2: all the business cards at once, not on scroll). One straight wipe per card,
+    // set up now (cards stay hidden) and played together after reveal.cardsAfter.
+    var wipes = cards.map(function (card) {
+      card.setAttribute("data-wipe", "pending");
+      return straightWipe(card, {
+        done: function () {
+          card.setAttribute("data-wipe", "done");
+          card.dispatchEvent(new CustomEvent("mega:wiped", { bubbles: true }));
+        },
       });
-      onScroll(row.cards[0], { play: function () { due.then(function () { tl.play(); }); } }, reveal.cardStart);
     });
+    setTimeout(function () { wipes.forEach(function (w) { w.play(); }); }, reveal.cardsAfter * 1000);
   }
 
   // ─────────────────────────────────────────────
@@ -963,7 +1008,7 @@
   var reveal = {
     start: small ? "top 95%" : "top 90%",      // headings, text and images
     cardStart: small ? "top 90%" : "top 85%",  // card groups
-    cardsAfter: small ? 0.6 : 0.8,             // seconds after load before company cards already in view wipe in
+    cardsAfter: small ? 0.6 : 0.8,             // seconds after load before all company cards wipe in together
   };
 
   // Plays a timeline once when `trigger` reaches the start line.
