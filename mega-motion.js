@@ -586,7 +586,144 @@
       if (on(button)) tl.to(button, fadeUp(button), Math.max(at + draw * 0.5, 0.6));
       form.addEventListener("focusin", function () { if (tl.progress() < 1) tl.progress(1); });
       onScroll(form, tl, reveal.cardStart);
+      contactStates(form);
     });
+  }
+
+  // ─────────────────────────────────────────────
+  // Contact form states (pass 6b; Ivan asked for something to confirm a sent message, no design frame, so it is
+  // built from the page's own language). Webflow's form script swaps the form for the success message instantly;
+  // we catch that swap before it paints and play it out:
+  // - Sending: the Submit pill narrows to a circle and softly pulses (the spam check and send take about a second).
+  // - Sent: the field outlines retract the way they drew, bottom field first, as labels and text fade; then the
+  //   section eases to its new height, the success box's outline draws round, three blocks rise into the M's
+  //   staircase inside it, and the message lifts out of a mask.
+  // - Error: the button goes back to a pill and the error message fades up. No shake.
+  // Both messages are live regions, so screen readers announce them. Reduced motion: Webflow's plain swap.
+  // ─────────────────────────────────────────────
+  function staircase() {
+    // Three blocks, rising left to right: the M's stepped profile.
+    var svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("viewBox", "0 0 3 3");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", CONFIG.name + "-success-steps");
+    Object.assign(svg.style, { display: "block", width: "2.25rem", height: "2.25rem", margin: "0 auto 1rem", overflow: "hidden" });
+    var blocks = [1, 2, 3].map(function (h, i) {
+      var r = document.createElementNS(SVGNS, "rect");
+      r.setAttribute("x", i);
+      r.setAttribute("y", 3 - h);
+      r.setAttribute("width", 1.002);
+      r.setAttribute("height", h);
+      r.setAttribute("fill", "currentColor");
+      svg.appendChild(r);
+      return r;
+    });
+    return { svg: svg, blocks: blocks };
+  }
+
+  function contactStates(form) {
+    var wrap = form.closest(".w-form");
+    var done = wrap && wrap.querySelector(".w-form-done");
+    var fail = wrap && wrap.querySelector(".w-form-fail");
+    if (!done) return;
+    var formDisplay = getComputedStyle(form).display;
+    [done, fail].forEach(function (el) { if (el) el.setAttribute("aria-live", "polite"); });
+
+    var steps = staircase();
+    var doneText = done.firstElementChild;
+    done.insertBefore(steps.svg, doneText);
+
+    // Sending
+    var button = form.querySelector(".button_main_element");
+    var label = button && button.querySelector(".button_main_text");
+    var pulse = null, pill = null;
+    function sending() {
+      if (!button || pulse) return;
+      pill = button.offsetWidth;
+      var h = button.offsetHeight;
+      gsap.set(button, { width: pill, overflow: "hidden" });
+      gsap.to(label, { autoAlpha: 0, duration: 0.2, ease: "power2.out" });
+      gsap.to(button, { width: h, duration: 0.5, ease: EASE });
+      pulse = gsap.to(button, { opacity: 0.45, duration: 0.6, ease: "sine.inOut", repeat: -1, yoyo: true, delay: 0.4 });
+    }
+    function backToPill() {
+      if (!button || !pulse) return;
+      pulse.kill(); pulse = null;
+      gsap.to(button, { opacity: 1, width: pill, duration: 0.5, ease: EASE, onComplete: function () { gsap.set(button, { clearProps: "width,overflow,opacity" }); } });
+      gsap.to(label, { autoAlpha: 1, duration: 0.3, delay: 0.25, clearProps: "opacity,visibility" });
+    }
+    form.addEventListener("submit", sending);
+
+    var playing = false;
+    function succeeded() {
+      if (playing) return;
+      playing = true;
+      // Undo Webflow's instant swap for now: form back, message hidden, until the form has packed away.
+      form.style.display = formDisplay;
+      done.style.display = "none";
+      var h0 = wrap.offsetHeight;
+      var rows = Array.prototype.slice.call(form.querySelectorAll(".form_label_wrap")).reverse();
+      var outlines = [];
+      var out = gsap.timeline({ onComplete: reveal });
+      if (pulse) { pulse.kill(); pulse = null; }
+      var btnWrap = form.querySelector(".u-button-wrapper");
+      if (btnWrap) out.to(btnWrap, { autoAlpha: 0, scale: 0.9, duration: 0.35, ease: "power2.in" }, 0);
+      rows.forEach(function (row, i) {
+        var field = row.querySelector(".form_field"), lab = row.querySelector(".form_label_text");
+        var at = 0.1 + i * 0.09;
+        if (field) {
+          var o = standInOutline(field);
+          if (o) {
+            outlines.push(o);
+            var len = parseFloat(o.rect.style.strokeDashoffset) || 0;
+            gsap.set(o.rect, { strokeDashoffset: 0 });
+            out.to(o.rect, { strokeDashoffset: len, duration: 0.6, ease: EASE }, at);
+          }
+          out.to(field, { autoAlpha: 0, duration: 0.35, ease: "power2.in" }, at);
+        }
+        if (lab) out.to(lab, { autoAlpha: 0, y: 8, duration: 0.35, ease: "power2.in" }, at + 0.05);
+      });
+      var heading = form.querySelector(".u-heading");
+      if (heading) out.to(heading, { autoAlpha: 0, y: 8, duration: 0.4, ease: "power2.in" }, 0.1 + rows.length * 0.09);
+
+      function reveal() {
+        outlines.forEach(function (o) { o.svg.remove(); o.field.style.borderColor = ""; o.holder.style.position = ""; });
+        form.style.display = "none";
+        gsap.set(form.querySelectorAll(".form_field, .form_label_text, .u-heading, .u-button-wrapper"), { clearProps: "opacity,visibility,transform" });
+        if (button) gsap.set([button, label], { clearProps: "width,overflow,opacity,visibility" });
+        done.style.display = "block";
+        var h1 = wrap.offsetHeight;
+        gsap.set(steps.blocks, { y: 3 });
+        if (doneText) gsap.set(doneText, { clipPath: "inset(-10% -5% 100% -5%)", y: 12 });
+        var box = standInOutline(done);
+        var tl = gsap.timeline({ onComplete: function () {
+          if (box) { box.svg.remove(); done.style.borderColor = ""; box.holder.style.position = ""; }
+          gsap.set(wrap, { clearProps: "height,overflow" });
+          if (window.ScrollTrigger) ScrollTrigger.refresh();
+        } });
+        gsap.set(wrap, { height: h0, overflow: "hidden" });
+        tl.to(wrap, { height: h1, duration: 0.8, ease: EASE }, 0);
+        if (box) { box.fit(); tl.to(box.rect, { strokeDashoffset: 0, duration: 1.0, ease: EASE }, 0.15); }
+        tl.to(steps.blocks, { y: 0, duration: 0.8, ease: EASE, stagger: 0.12, clearProps: "transform" }, 0.35);
+        if (doneText) tl.to(doneText, { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: 0.9, ease: "power3.out", clearProps: "clipPath,transform" }, 0.7);
+      }
+    }
+
+    function failed() {
+      backToPill();
+      if (fail) gsap.fromTo(fail, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "circ.out", clearProps: "opacity,visibility,transform" });
+    }
+
+    // Webflow shows a message by setting display on it; watch for that.
+    var shown = function (el) { return el && el.style.display && el.style.display !== "none"; };
+    var wasDone = false, wasFail = false;
+    var watch = new MutationObserver(function () {
+      var d = shown(done), f = shown(fail);
+      if (d && !wasDone) succeeded();
+      if (f && !wasFail) failed();
+      wasDone = d || playing; wasFail = f;
+    });
+    [done, fail].forEach(function (el) { if (el) watch.observe(el, { attributes: true, attributeFilter: ["style"] }); });
   }
 
   // ─────────────────────────────────────────────
