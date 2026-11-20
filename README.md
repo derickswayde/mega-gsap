@@ -26,6 +26,7 @@ Smooth scroll (Lenis) and scroll reveals (GSAP) for the Mega Lumos Webflow site.
 - Anchor links land below the fixed nav and move focus to the target; a page opened with a hash lands correctly (Safari too).
 - On load: nav slides in, hero heading lines rise, paragraph fades up, hero image wipes in.
 - Companies (pass 3): each row of `.card_company_wrap` step-wipes in (three columns rising, right first: the M staircase), left card first, photo settles 1.08 → 1; rows wait until the page has been scrolled 12% of the viewport (`reveal.scrollIn`) and the hero has landed, so nothing plays before the first scroll. Sets `data-wipe` pending/done and fires `mega:wiped` for the logo reveals.
+- Team (pass 4): each `.card_team_wrap` portrait step-wipes in (photo settles 1.08 → 1); the name lifts out of a mask, then role and biography paragraphs fade up.
 - On scroll, per section (picked up from Lumos classes): heading lines + paragraph fade, image wipes (away from their text), card wipes (`CONFIG.cards`), accordion row wipes, background panel wipe.
 - `data-motion="off"` opts any element out; `data-motion="wipe-left"` / `"wipe-right"` overrides an image wipe.
 - `window.megaMotion.lenis` for debugging.

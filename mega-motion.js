@@ -428,6 +428,45 @@
   }
 
   // ─────────────────────────────────────────────
+  // Team (static Card Team panels; the CMS slider comes later): the portrait step-wipes in with the photo
+  // settling inside it; the name lifts out of a mask; role and biography paragraphs fade up after it.
+  // ─────────────────────────────────────────────
+  function maskIn(el) {
+    gsap.set(el, { clipPath: "inset(-10% -5% 100% -5%)", y: small ? 12 : 18 });
+    return { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.7 : 0.9, ease: "power3.out", clearProps: "clipPath,transform" };
+  }
+
+  function fadeUp(el) {
+    gsap.set(el, { autoAlpha: 0, y: small ? 16 : 30 });
+    return { autoAlpha: 1, y: 0, duration: small ? 0.6 : 1, ease: "circ.out", clearProps: "opacity,visibility,transform" };
+  }
+
+  function team() {
+    var cards = Array.prototype.filter.call(document.querySelectorAll(".card_team_wrap"), on);
+    if (!cards.length || !window.ScrollTrigger) return;
+    var dur = small ? 0.9 : 1.3;
+    cards.forEach(function (card) {
+      var tl = gsap.timeline({ paused: true });
+      var visual = card.querySelector(".card_team_visual");
+      if (on(visual)) {
+        var media = visual.querySelector(".u-image-wrapper");
+        var wipe = stepWipe(visual, { duration: dur });
+        if (media) gsap.set(media, { scale: 1.08 });
+        tl.add(function () { wipe.play(); }, 0);
+        if (media) tl.to(media, { scale: 1, duration: dur + 0.4, ease: "power2.out", clearProps: "transform" }, 0);
+      }
+      var name = card.querySelector(".card_team_name");
+      if (on(name)) tl.to(name, maskIn(name), 0.15);
+      var role = card.querySelector(".card_team_role");
+      if (on(role)) tl.to(role, fadeUp(role), 0.3);
+      card.querySelectorAll(".card_team_bio > *").forEach(function (p, i) {
+        if (on(p)) tl.to(p, fadeUp(p), 0.42 + i * 0.12);
+      });
+      onScroll(card, tl, reveal.cardStart);
+    });
+  }
+
+  // ─────────────────────────────────────────────
   // Section reveals (on scroll), shared by every section.
   // Picked up from the Lumos classes already on the page; data-motion="off" opts out.
   // ─────────────────────────────────────────────
@@ -635,6 +674,10 @@
         gsap.set(".card_company_wrap, .card_company_wrap *", { clearProps: "all" });
         document.querySelectorAll(".card_company_wrap").forEach(function (c) { c.setAttribute("data-wipe", "done"); });
         console.error("[" + CONFIG.name + "-motion] companies", e);
+      }
+      try { team(); } catch (e) {
+        gsap.set(".card_team_wrap, .card_team_wrap *", { clearProps: "all" });
+        console.error("[" + CONFIG.name + "-motion] team", e);
       }
       sections();
     }

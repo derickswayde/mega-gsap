@@ -20,7 +20,8 @@
   @keyframes mega-motion-fallback { to { visibility: visible; } }
   html.mega-motion:not(.mega-motion-ready) .nav_component,
   html.mega-motion:not(.mega-motion-ready) main > section:first-child :is(.hero_art_img, .u-icon, .u-text, .u-button-wrapper),
-  html.mega-motion:not(.mega-motion-ready) .card_company_wrap {
+  html.mega-motion:not(.mega-motion-ready) .card_company_wrap,
+  html.mega-motion:not(.mega-motion-ready) .card_team_wrap :is(.card_team_visual, .card_team_name, .card_team_role, .card_team_bio) {
     visibility: hidden;
     animation: mega-motion-fallback 0s 3s forwards;
   }
