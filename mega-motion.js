@@ -306,7 +306,7 @@
   // Hero cube.
   // Desktop (fine pointer, WebGL): the designer's 3D M is rendered live (cube/cube.js, Three.js, loaded only here)
   // and turns with the pointer; it takes over from the still image once the hero has landed.
-  // Touch: no hover, so the still image tilts back gently as the hero scrolls away.
+  // Touch: the still image stays as it is.
   // ─────────────────────────────────────────────
   function webgl() {
     try {
@@ -333,15 +333,7 @@
       return;
     }
 
-    if (desktop || !window.ScrollTrigger) return;
-    heroArt.then(function () {
-      // GSAP folds the class's translate(-50%) into its transform; keep it a percentage so it stays centred on rotate.
-      gsap.set(img, { x: 0, xPercent: -50, transformPerspective: 900, transformOrigin: "50% 30%" });
-      gsap.to(img, {
-        rotateX: 10, rotateY: -4, y: -30, ease: "none",
-        scrollTrigger: { trigger: section, start: "top top", end: "bottom top", scrub: 0.8 },
-      });
-    });
+    // Touch: the still image stays put (the scroll tilt was dropped in feedback round 1, 20 November 2026).
   }
 
   // ─────────────────────────────────────────────
@@ -384,9 +376,25 @@
     });
   }
 
+  // Straight wipe (Manta's manners, feedback round 1, 20 November 2026): the element uncovers from the bottom up
+  // with a straight edge. No rise, no zoom. Returns a paused tween.
+  var wipe = { duration: small ? 0.8 : 1.1, ease: "power2.inOut" };
+
+  function straightWipe(el, opts) {
+    var round = roundOf(el);
+    gsap.set(el, { clipPath: "inset(100% 0% 0% 0%" + round + ")" });
+    return gsap.to(el, {
+      clipPath: "inset(0% 0% 0% 0%" + round + ")",
+      duration: wipe.duration,
+      ease: wipe.ease,
+      paused: true,
+      onComplete: function () { gsap.set(el, { clearProps: "clipPath" }); if (opts && opts.done) opts.done(); },
+    });
+  }
+
   // ─────────────────────────────────────────────
-  // Companies: each row of company cards step-wipes in as it arrives, left card first.
-  // The photo settles inside the wipe; then the card's logo reveal is allowed (logo-reveals/init.js waits for data-wipe).
+  // Companies: each row of company cards wipes in together (straight edge, bottom up) as it arrives;
+  // then the card's logo reveal is allowed (logo-reveals/init.js waits for data-wipe).
   // ─────────────────────────────────────────────
   function companies() {
     var cards = Array.prototype.filter.call(document.querySelectorAll(".card_company_wrap"), on);
@@ -400,27 +408,20 @@
       if (row) row.cards.push(c); else rows.push({ top: top, cards: [c] });
     });
 
-    var dur = small ? 0.9 : 1.3, rise = small ? 20 : 40;
     var scrolledIn = scrolledPast(reveal.scrollIn);
     rows.forEach(function (row) {
       row.cards.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
       var tl = gsap.timeline({ paused: true });
-      row.cards.forEach(function (card, i) {
-        var media = card.querySelector(".u-image-wrapper");
+      // The row arrives together: one straight wipe per card, all at once.
+      row.cards.forEach(function (card) {
         card.setAttribute("data-wipe", "pending");
-        gsap.set(card, { y: rise });
-        if (media) gsap.set(media, { scale: 1.08 });
-        var at = i * (small ? 0.1 : 0.16);
-        var wipe = stepWipe(card, {
-          duration: dur,
+        var w = straightWipe(card, {
           done: function () {
             card.setAttribute("data-wipe", "done");
             card.dispatchEvent(new CustomEvent("mega:wiped", { bubbles: true }));
           },
         });
-        tl.add(function () { wipe.play(); }, at);
-        tl.to(card, { y: 0, duration: dur, ease: EASE, clearProps: "transform" }, at);
-        if (media) tl.to(media, { scale: 1, duration: dur + 0.4, ease: "power2.out", clearProps: "transform" }, at);
+        tl.add(function () { w.play(); }, 0);
       });
       // A row only plays once the visitor has scrolled a little (and the hero has landed),
       // so cards already in view on load wait for the first scroll instead of playing on their own.
@@ -429,48 +430,41 @@
   }
 
   // ─────────────────────────────────────────────
-  // Team (static Card Team panels; the CMS slider comes later): the portrait step-wipes in with the photo
-  // settling inside it; the name lifts out of a mask; role and biography paragraphs fade up after it.
+  // Team (static Card Team panels; the CMS slider comes later): the portrait wipes in (straight edge, bottom up);
+  // the name lifts out of a mask; role and biography fade up together after it.
   // ─────────────────────────────────────────────
   function maskIn(el) {
-    gsap.set(el, { clipPath: "inset(-10% -5% 100% -5%)", y: small ? 12 : 18 });
-    return { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.7 : 0.9, ease: "power3.out", clearProps: "clipPath,transform" };
+    gsap.set(el, { clipPath: "inset(-10% -5% 100% -5%)", y: small ? 10 : 14 });
+    return { clipPath: "inset(-10% -5% -10% -5%)", y: 0, duration: small ? 0.6 : 0.9, ease: "power3.out", clearProps: "clipPath,transform" };
   }
 
   function fadeUp(el) {
-    gsap.set(el, { autoAlpha: 0, y: small ? 16 : 30 });
-    return { autoAlpha: 1, y: 0, duration: small ? 0.6 : 1, ease: "circ.out", clearProps: "opacity,visibility,transform" };
+    gsap.set(el, { autoAlpha: 0, y: small ? 12 : 16 });
+    return { autoAlpha: 1, y: 0, duration: small ? 0.6 : 0.9, ease: "power2.out", clearProps: "opacity,visibility,transform" };
   }
 
   function team() {
     var cards = Array.prototype.filter.call(document.querySelectorAll(".card_team_wrap"), on);
     if (!cards.length || !window.ScrollTrigger) return;
-    var dur = small ? 0.9 : 1.3;
     cards.forEach(function (card) {
       var tl = gsap.timeline({ paused: true });
       var visual = card.querySelector(".card_team_visual");
       if (on(visual)) {
-        var media = visual.querySelector(".u-image-wrapper");
-        var wipe = stepWipe(visual, { duration: dur });
-        if (media) gsap.set(media, { scale: 1.08 });
-        tl.add(function () { wipe.play(); }, 0);
-        if (media) tl.to(media, { scale: 1, duration: dur + 0.4, ease: "power2.out", clearProps: "transform" }, 0);
+        var w = straightWipe(visual);
+        tl.add(function () { w.play(); }, 0);
       }
       var name = card.querySelector(".card_team_name");
       if (on(name)) tl.to(name, maskIn(name), 0.15);
-      var role = card.querySelector(".card_team_role");
-      if (on(role)) tl.to(role, fadeUp(role), 0.3);
-      card.querySelectorAll(".card_team_bio > *").forEach(function (p, i) {
-        if (on(p)) tl.to(p, fadeUp(p), 0.42 + i * 0.12);
-      });
+      // Role and biography arrive together, one beat.
+      var copy = [card.querySelector(".card_team_role")].concat(Array.prototype.slice.call(card.querySelectorAll(".card_team_bio > *"))).filter(on);
+      copy.forEach(function (el) { tl.to(el, fadeUp(el), 0.3); });
       onScroll(card, tl, reveal.cardStart);
     });
   }
 
   // ─────────────────────────────────────────────
-  // Backed By strip: its top and bottom rules draw outwards from the centre, then the line of text fades up
-  // and the linked name rises a beat later. A border can't be drawn, so stand-in lines cover it while it plays
-  // and the real borders come back unchanged at the end.
+  // Backed By strip: the rules stay put; the line of text fades up (feedback round 1, 20 November 2026).
+  // standInRule() is kept for reference; nothing calls it now.
   // ─────────────────────────────────────────────
   function standInRule(wrap, side) {
     var cs = getComputedStyle(wrap);
@@ -490,28 +484,18 @@
     var wraps = Array.prototype.filter.call(document.querySelectorAll(".backed_wrap"), on);
     if (!wraps.length || !window.ScrollTrigger) return;
     wraps.forEach(function (wrap) {
-      var lines = [standInRule(wrap, "Top"), standInRule(wrap, "Bottom")].filter(Boolean);
       var text = wrap.querySelector(".backed_text");
-      var link = text && text.querySelector(".backed_link");
-      var tl = gsap.timeline({ paused: true, onComplete: function () {
-        lines.forEach(function (l) { l.remove(); });
-        wrap.style.borderTopColor = wrap.style.borderBottomColor = "";
-      } });
-      if (lines.length) {
-        gsap.set(lines, { scaleX: 0 });
-        tl.to(lines, { scaleX: 1, duration: small ? 0.8 : 1.1, ease: EASE }, 0);
-      }
-      if (on(text)) tl.to(text, fadeUp(text), small ? 0.3 : 0.45);
-      if (on(link)) tl.to(link, maskIn(link), small ? 0.45 : 0.65);
+      if (!on(text)) return;
+      var tl = gsap.timeline({ paused: true });
+      tl.to(text, fadeUp(text), 0);
       onScroll(wrap, tl, reveal.cardStart);
     });
   }
 
   // ─────────────────────────────────────────────
-  // Contact form: the heading lifts out of a mask; each field steps in after the one above it (label fades up,
-  // then a stand-in outline draws round the field clockwise from the top-left corner and the placeholder fades
-  // in); the button comes last. The real border is hidden while the stand-in draws and restored at the end.
-  // Clicking into a field mid-animation jumps to the end, so focus states are never covered.
+  // Contact form: the heading lifts out of a mask; the fields and their labels fade up together, the button a
+  // beat later (feedback round 1, 20 November 2026; the outline draw is gone). Clicking into a field
+  // mid-animation jumps to the end. standInOutline() is still used by the sent state (contactStates).
   // ─────────────────────────────────────────────
   var SVGNS = "http://www.w3.org/2000/svg";
 
@@ -555,36 +539,18 @@
   function contact() {
     var forms = Array.prototype.filter.call(document.querySelectorAll(".form_element.is-contact"), on);
     if (!forms.length || !window.ScrollTrigger) return;
-    var step = small ? 0.1 : 0.14;
-    var draw = small ? 0.7 : 1.0;
     forms.forEach(function (form) {
-      var outlines = [];
-      var tl = gsap.timeline({ paused: true,
-        onStart: function () { outlines.forEach(function (o) { o.fit(); }); },
-        onComplete: function () {
-          outlines.forEach(function (o) { o.svg.remove(); o.field.style.borderColor = ""; o.holder.style.position = ""; });
-        } });
+      var tl = gsap.timeline({ paused: true });
       var heading = form.querySelector(".u-heading");
       if (on(heading)) tl.to(heading, maskIn(heading), 0);
-      var at = 0.2;
       form.querySelectorAll(".form_label_wrap").forEach(function (row) {
         if (!on(row)) return;
-        var label = row.querySelector(".form_label_text");
-        var field = row.querySelector(".form_field");
-        if (label) tl.to(label, fadeUp(label), at);
-        if (field) {
-          var o = standInOutline(field);
-          if (o) {
-            outlines.push(o);
-            tl.to(o.rect, { strokeDashoffset: 0, duration: draw, ease: EASE }, at + 0.1);
-          }
-          gsap.set(field, { autoAlpha: 0 });
-          tl.to(field, { autoAlpha: 1, duration: 0.6, ease: "power2.out", clearProps: "opacity,visibility" }, at + 0.1 + draw * 0.35);
-        }
-        at += step;
+        [row.querySelector(".form_label_text"), row.querySelector(".form_field")].forEach(function (el) {
+          if (el) tl.to(el, fadeUp(el), 0.2);
+        });
       });
       var button = form.querySelector(".u-button-wrapper");
-      if (on(button)) tl.to(button, fadeUp(button), Math.max(at + draw * 0.5, 0.6));
+      if (on(button)) tl.to(button, fadeUp(button), 0.3);
       form.addEventListener("focusin", function () { if (tl.progress() < 1) tl.progress(1); });
       onScroll(form, tl, reveal.cardStart);
       contactStates(form);
@@ -732,8 +698,8 @@
   }
 
   // ─────────────────────────────────────────────
-  // Footer (on scroll): the two column rules draw in from the left; the headline rises line by line; the
-  // button and the links step in after it. The wordmark has its own trigger: its four letters rise out of the
+  // Footer (on scroll): the headline rises line by line; the links and button fade up after it (the column
+  // rules stay put since feedback round 1; drawRule() is kept for reference). The wordmark has its own trigger: its four letters rise out of the
   // logo's own bounds (the SVG clips them), M first, A last, then the copyright line fades up.
   // ─────────────────────────────────────────────
   function drawRule(wrap) {
@@ -757,18 +723,10 @@
   function footer() {
     var wrap = document.querySelector(".footer_wrap");
     if (!on(wrap) || !window.ScrollTrigger) return;
-    var draw = small ? 0.7 : 1.0;
-
     // CTA and links
     var layout = wrap.querySelector(".footer_layout");
     if (on(layout)) {
-      var rules = [];
-      var tl = gsap.timeline({ paused: true, onComplete: function () { rules.forEach(function (r) { r.restore(); }); } });
-      [".footer_content", ".footer_links"].forEach(function (sel, i) {
-        var col = layout.querySelector(sel);
-        var r = col && on(col) ? drawRule(col) : null;
-        if (r) { rules.push(r); tl.to(r.line, { scaleX: 1, duration: draw, ease: EASE }, i * 0.12); }
-      });
+      var tl = gsap.timeline({ paused: true });
       var heads = Array.prototype.filter.call(layout.querySelectorAll(".footer_content_top .u-heading"), on);
       heads.forEach(function (h, i) {
         var el = h.firstElementChild || h;
@@ -776,9 +734,9 @@
         tl.add(function () { fontsReady().then(function () { lineReveal(el, { duration: small ? 0.55 : 0.8 }); }); }, 0.15 + i * 0.15);
       });
       var button = layout.querySelector(".footer_content > .button_main_wrap");
-      if (on(button)) tl.to(button, fadeUp(button), 0.5);
-      Array.prototype.filter.call(layout.querySelectorAll(".footer_group_item"), on).forEach(function (item, i) {
-        tl.to(item, fadeUp(item), 0.3 + i * (small ? 0.06 : 0.08));
+      if (on(button)) tl.to(button, fadeUp(button), 0.45);
+      Array.prototype.filter.call(layout.querySelectorAll(".footer_group_item"), on).forEach(function (item) {
+        tl.to(item, fadeUp(item), 0.3);
       });
       onScroll(layout, tl, reveal.cardStart);
     }
@@ -799,9 +757,9 @@
         tl2.to(letters, { y: 0, duration: small ? 0.9 : 1.2, ease: EASE, stagger: small ? 0.08 : 0.11, clearProps: "transform" }, 0);
       }
       if (on(bottom)) tl2.to(bottom, fadeUp(bottom), letters.length ? 0.6 : 0);
-      if (letters.length) tl2.add(function () { knockout(logo); });
+      if (letters.length && knock.on) tl2.add(function () { knockout(logo); });
       onScroll(logo || bottom, tl2, reveal.cardStart);
-    } else if (on(logo)) {
+    } else if (on(logo) && knock.on) {
       knockout(logo);
     }
   }
@@ -817,6 +775,7 @@
   // wordmark has built. Reduced motion: nothing (whole script is off).
   // ─────────────────────────────────────────────
   var knock = {
+    on: false,          // off since feedback round 1 (20 November 2026: "a little too flashy"); true brings it back
     cell: 1.15,         // target cell in logo units: half the letters' stroke module (~2.3), about 17px at 1440
     radius: 3.5,        // brush reach in cells (same size on screen as before, about 68px); strength falls off with distance
     peak: 1,            // strength at the brush centre (1 = fully cleared)

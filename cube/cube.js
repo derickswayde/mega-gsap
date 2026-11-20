@@ -28,7 +28,7 @@ export var settings = {
   driftSeconds: 9,
   fadeIn: 0.8,            // seconds for the cube to take over from the still image
   puffSize: 30,           // rem: radius of the soft glow that follows the cursor over the cube
-  puffStrength: 0.136,    // white opacity at its centre (0 turns it off); 0.16 − 15% (Derick, 20 November 2026)
+  puffStrength: 0,        // white opacity at its centre (0 turns it off). Off: client feedback round 1 (20 November 2026); was 0.136
   puffFollow: 0.08,       // how quickly the glow catches up with the cursor
 };
 
@@ -88,7 +88,7 @@ export function start(opts) {
     maskImage: puffMask, webkitMaskImage: puffMask,
   });
   holder.appendChild(canvas);
-  holder.appendChild(puff);
+  if (S.puffStrength) holder.appendChild(puff);
 
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: "low-power" });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
