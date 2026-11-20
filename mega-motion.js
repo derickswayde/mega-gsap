@@ -467,6 +467,46 @@
   }
 
   // ─────────────────────────────────────────────
+  // Backed By strip: its top and bottom rules draw outwards from the centre, then the line of text fades up
+  // and the linked name rises a beat later. A border can't be drawn, so stand-in lines cover it while it plays
+  // and the real borders come back unchanged at the end.
+  // ─────────────────────────────────────────────
+  function standInRule(wrap, side) {
+    var cs = getComputedStyle(wrap);
+    var width = parseFloat(cs["border" + side + "Width"]) || 0;
+    if (!width || cs["border" + side + "Style"] === "none") return null;
+    var line = document.createElement("div");
+    line.setAttribute("aria-hidden", "true");
+    var css = { position: "absolute", left: "0", right: "0", height: width + "px", background: cs["border" + side + "Color"], transformOrigin: "50% 50%", pointerEvents: "none" };
+    css[side.toLowerCase()] = -width + "px";
+    Object.assign(line.style, css);
+    wrap.appendChild(line);
+    wrap.style["border" + side + "Color"] = "transparent";
+    return line;
+  }
+
+  function backedBy() {
+    var wraps = Array.prototype.filter.call(document.querySelectorAll(".backed_wrap"), on);
+    if (!wraps.length || !window.ScrollTrigger) return;
+    wraps.forEach(function (wrap) {
+      var lines = [standInRule(wrap, "Top"), standInRule(wrap, "Bottom")].filter(Boolean);
+      var text = wrap.querySelector(".backed_text");
+      var link = text && text.querySelector(".backed_link");
+      var tl = gsap.timeline({ paused: true, onComplete: function () {
+        lines.forEach(function (l) { l.remove(); });
+        wrap.style.borderTopColor = wrap.style.borderBottomColor = "";
+      } });
+      if (lines.length) {
+        gsap.set(lines, { scaleX: 0 });
+        tl.to(lines, { scaleX: 1, duration: small ? 0.8 : 1.1, ease: EASE }, 0);
+      }
+      if (on(text)) tl.to(text, fadeUp(text), small ? 0.3 : 0.45);
+      if (on(link)) tl.to(link, maskIn(link), small ? 0.45 : 0.65);
+      onScroll(wrap, tl, reveal.cardStart);
+    });
+  }
+
+  // ─────────────────────────────────────────────
   // Section reveals (on scroll), shared by every section.
   // Picked up from the Lumos classes already on the page; data-motion="off" opts out.
   // ─────────────────────────────────────────────
@@ -678,6 +718,11 @@
       try { team(); } catch (e) {
         gsap.set(".card_team_wrap, .card_team_wrap *", { clearProps: "all" });
         console.error("[" + CONFIG.name + "-motion] team", e);
+      }
+      try { backedBy(); } catch (e) {
+        gsap.set(".backed_wrap, .backed_wrap *", { clearProps: "all" });
+        document.querySelectorAll(".backed_wrap").forEach(function (w) { w.style.borderTopColor = w.style.borderBottomColor = ""; });
+        console.error("[" + CONFIG.name + "-motion] backed by", e);
       }
       sections();
     }
