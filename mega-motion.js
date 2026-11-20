@@ -507,6 +507,89 @@
   }
 
   // ─────────────────────────────────────────────
+  // Contact form: the heading lifts out of a mask; each field steps in after the one above it (label fades up,
+  // then a stand-in outline draws round the field clockwise from the top-left corner and the placeholder fades
+  // in); the button comes last. The real border is hidden while the stand-in draws and restored at the end.
+  // Clicking into a field mid-animation jumps to the end, so focus states are never covered.
+  // ─────────────────────────────────────────────
+  var SVGNS = "http://www.w3.org/2000/svg";
+
+  function standInOutline(field) {
+    var cs = getComputedStyle(field);
+    var bw = parseFloat(cs.borderTopWidth) || 0;
+    if (!bw || cs.borderTopStyle === "none") return null;
+    var holder = field.parentElement;
+    if (getComputedStyle(holder).position === "static") holder.style.position = "relative";
+    var svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("aria-hidden", "true");
+    Object.assign(svg.style, { position: "absolute", overflow: "visible", pointerEvents: "none" });
+    var rect = document.createElementNS(SVGNS, "rect");
+    rect.setAttribute("fill", "none");
+    rect.style.stroke = cs.borderTopColor;
+    rect.style.strokeWidth = bw + "px";
+    svg.appendChild(rect);
+    holder.appendChild(svg);
+    field.style.borderColor = "transparent";
+    // Measured when it starts drawing, after fonts have settled the layout.
+    function fit() {
+      var w = field.offsetWidth, h = field.offsetHeight, half = bw / 2;
+      var r = Math.min(parseFloat(getComputedStyle(field).borderTopLeftRadius) || 0, w / 2, h / 2);
+      svg.setAttribute("width", w);
+      svg.setAttribute("height", h);
+      svg.style.left = field.offsetLeft + "px";
+      svg.style.top = field.offsetTop + "px";
+      rect.setAttribute("x", half);
+      rect.setAttribute("y", half);
+      rect.setAttribute("width", Math.max(0, w - bw));
+      rect.setAttribute("height", Math.max(0, h - bw));
+      rect.setAttribute("rx", Math.max(0, r - half));
+      var len = rect.getTotalLength ? rect.getTotalLength() : 2 * (w + h);
+      rect.style.strokeDasharray = len + " " + len;
+      rect.style.strokeDashoffset = len;
+    }
+    fit();
+    return { svg: svg, rect: rect, holder: holder, field: field, fit: fit };
+  }
+
+  function contact() {
+    var forms = Array.prototype.filter.call(document.querySelectorAll(".form_element.is-contact"), on);
+    if (!forms.length || !window.ScrollTrigger) return;
+    var step = small ? 0.1 : 0.14;
+    var draw = small ? 0.7 : 1.0;
+    forms.forEach(function (form) {
+      var outlines = [];
+      var tl = gsap.timeline({ paused: true,
+        onStart: function () { outlines.forEach(function (o) { o.fit(); }); },
+        onComplete: function () {
+          outlines.forEach(function (o) { o.svg.remove(); o.field.style.borderColor = ""; o.holder.style.position = ""; });
+        } });
+      var heading = form.querySelector(".u-heading");
+      if (on(heading)) tl.to(heading, maskIn(heading), 0);
+      var at = 0.2;
+      form.querySelectorAll(".form_label_wrap").forEach(function (row) {
+        if (!on(row)) return;
+        var label = row.querySelector(".form_label_text");
+        var field = row.querySelector(".form_field");
+        if (label) tl.to(label, fadeUp(label), at);
+        if (field) {
+          var o = standInOutline(field);
+          if (o) {
+            outlines.push(o);
+            tl.to(o.rect, { strokeDashoffset: 0, duration: draw, ease: EASE }, at + 0.1);
+          }
+          gsap.set(field, { autoAlpha: 0 });
+          tl.to(field, { autoAlpha: 1, duration: 0.6, ease: "power2.out", clearProps: "opacity,visibility" }, at + 0.1 + draw * 0.35);
+        }
+        at += step;
+      });
+      var button = form.querySelector(".u-button-wrapper");
+      if (on(button)) tl.to(button, fadeUp(button), Math.max(at + draw * 0.5, 0.6));
+      form.addEventListener("focusin", function () { if (tl.progress() < 1) tl.progress(1); });
+      onScroll(form, tl, reveal.cardStart);
+    });
+  }
+
+  // ─────────────────────────────────────────────
   // Section reveals (on scroll), shared by every section.
   // Picked up from the Lumos classes already on the page; data-motion="off" opts out.
   // ─────────────────────────────────────────────
@@ -723,6 +806,12 @@
         gsap.set(".backed_wrap, .backed_wrap *", { clearProps: "all" });
         document.querySelectorAll(".backed_wrap").forEach(function (w) { w.style.borderTopColor = w.style.borderBottomColor = ""; });
         console.error("[" + CONFIG.name + "-motion] backed by", e);
+      }
+      try { contact(); } catch (e) {
+        gsap.set(".form_element.is-contact, .form_element.is-contact *", { clearProps: "all" });
+        document.querySelectorAll(".form_element.is-contact .form_field").forEach(function (f) { f.style.borderColor = ""; });
+        document.querySelectorAll(".form_element.is-contact svg[aria-hidden]").forEach(function (s) { s.remove(); });
+        console.error("[" + CONFIG.name + "-motion] contact", e);
       }
       sections();
     }

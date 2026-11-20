@@ -22,7 +22,8 @@
   html.mega-motion:not(.mega-motion-ready) main > section:first-child :is(.hero_art_img, .u-icon, .u-text, .u-button-wrapper),
   html.mega-motion:not(.mega-motion-ready) .card_company_wrap,
   html.mega-motion:not(.mega-motion-ready) .card_team_wrap :is(.card_team_visual, .card_team_name, .card_team_role, .card_team_bio),
-  html.mega-motion:not(.mega-motion-ready) .backed_text {
+  html.mega-motion:not(.mega-motion-ready) .backed_text,
+  html.mega-motion:not(.mega-motion-ready) .form_element.is-contact :is(.u-heading, .form_label_text, .form_field, .u-button-wrapper) {
     visibility: hidden;
     animation: mega-motion-fallback 0s 3s forwards;
   }
