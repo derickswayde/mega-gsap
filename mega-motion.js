@@ -1197,10 +1197,30 @@
   // ─────────────────────────────────────────────
 
   // ─────────────────────────────────────────────
+  // Background videos (Lumos Visual Video with autoplay): kept invisible until they actually play, so the
+  // poster image underneath shows instead. On iOS Low Power Mode, data saver or any blocked autoplay the
+  // video never starts, so visitors see the still poster and never Safari's play button. Runs with reduced
+  // motion too. The head code hides autoplay videos until [data-playing] is set.
+  // ─────────────────────────────────────────────
+  function backgroundVideos() {
+    document.querySelectorAll("video[autoplay]").forEach(function (video) {
+      var show = function () { video.setAttribute("data-playing", ""); };
+      if (!video.paused && video.readyState > 2) { show(); return; }
+      video.addEventListener("playing", show, { once: true });
+      var tried = video.play && video.play();
+      if (tried && tried.catch) tried.catch(function () {});  // blocked: stay hidden, poster shows
+    });
+  }
+
+  // ─────────────────────────────────────────────
   // Init
   // ─────────────────────────────────────────────
   function init() {
     if (window.gsap && window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
+    try { backgroundVideos(); } catch (e) {
+      document.querySelectorAll("video[autoplay]").forEach(function (v) { v.setAttribute("data-playing", ""); });
+      console.error("[" + CONFIG.name + "-motion] videos", e);
+    }
     startLenis();
     bindAnchors();
     bindMenu();

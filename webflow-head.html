@@ -14,6 +14,12 @@
   .lenis.lenis-smooth iframe { pointer-events: none; }
   .lenis.lenis-autoToggle { transition-property: overflow; transition-duration: 1ms; transition-behavior: allow-discrete; }
 
+  /* Background videos: hidden until they actually play (mega-motion.js sets data-playing), so the poster image
+     underneath shows when autoplay is blocked (iOS Low Power Mode, data saver). Also hide Safari's play button. */
+  video[autoplay]:not([data-playing]) { opacity: 0; pointer-events: none; }
+  video[autoplay] { transition: opacity 0.4s ease; }
+  video[autoplay]::-webkit-media-controls-start-playback-button { display: none !important; -webkit-appearance: none; }
+
   /* Reveal guard: what animates in is hidden until the script is ready.
      If the script hasn't run within 3s, everything shows anyway.
      Keep these selectors in step with the script (SECTIONS, CARDS); add project ones pass by pass. */
