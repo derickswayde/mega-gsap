@@ -693,11 +693,15 @@
         if (button) gsap.set([button, label], { clearProps: "width,overflow,opacity,visibility" });
         done.style.display = "block";
         var h1 = wrap.offsetHeight;
+        // The message box stretches to fill the form's container. Hold it at its final size while the section
+        // eases down around it, so its outline is drawn at the size it ends up (bottom line included).
+        gsap.set(done, { height: done.offsetHeight });
         gsap.set(steps.blocks, { y: 3 });
         if (doneText) gsap.set(doneText, { clipPath: "inset(-10% -5% 100% -5%)", y: 12 });
         var box = standInOutline(done);
         var tl = gsap.timeline({ onComplete: function () {
           if (box) { box.svg.remove(); done.style.borderColor = ""; box.holder.style.position = ""; }
+          gsap.set(done, { clearProps: "height" });
           gsap.set(wrap, { clearProps: "height,overflow" });
           if (window.ScrollTrigger) ScrollTrigger.refresh();
         } });
