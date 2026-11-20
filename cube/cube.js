@@ -28,7 +28,7 @@ export var settings = {
   driftSeconds: 9,
   fadeIn: 0.8,            // seconds for the cube to take over from the still image
   puffSize: 30,           // rem: radius of the soft glow that follows the cursor over the cube
-  puffStrength: 0.16,     // white opacity at its centre (0 turns it off); Derick, 20 November 2026
+  puffStrength: 0.136,    // white opacity at its centre (0 turns it off); 0.16 − 15% (Derick, 20 November 2026)
   puffFollow: 0.08,       // how quickly the glow catches up with the cursor
 };
 
