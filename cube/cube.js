@@ -27,6 +27,9 @@ export var settings = {
   drift: 1.2,             // idle breathing, degrees
   driftSeconds: 9,
   fadeIn: 0.8,            // seconds for the cube to take over from the still image
+  puffSize: 30,           // rem: radius of the soft glow that follows the cursor over the cube
+  puffStrength: 0.07,     // white opacity at its centre (0 turns it off)
+  puffFollow: 0.08,       // how quickly the glow catches up with the cursor
 };
 
 var POSE = { yaw: -27.25, pitch: -15.5 };
@@ -74,7 +77,18 @@ export function start(opts) {
     position: "absolute", pointerEvents: "none", opacity: "0",
     maskImage: mask, webkitMaskImage: mask, maskSize: "100% 100%", webkitMaskSize: "100% 100%",
   });
+  // The puff: a soft glow over the cube (screen blend, so it lifts what it passes over) that follows the cursor around the hero.
+  // Its lower part dissolves, so it never shows a hard line where the hero ends.
+  var puff = document.createElement("div");
+  puff.setAttribute("aria-hidden", "true");
+  puff.className = "hero_art_puff";
+  var puffMask = "linear-gradient(to bottom, #000 55%, transparent 100%)";
+  Object.assign(puff.style, {
+    position: "absolute", inset: "0", pointerEvents: "none", opacity: "0", mixBlendMode: "screen",
+    maskImage: puffMask, webkitMaskImage: puffMask,
+  });
   holder.appendChild(canvas);
+  holder.appendChild(puff);
 
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: "low-power" });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -142,6 +156,30 @@ export function start(opts) {
   }, { passive: true });
   document.documentElement.addEventListener("pointerleave", function () { target.x = target.y = 0; });
 
+  // The puff tracks the cursor in the hero's own coordinates and only shows while the cursor is in the hero.
+  var section = holder.closest("section") || holder;
+  var glow = { x: 0, y: 0, tx: 0, ty: 0, placed: false };
+  section.addEventListener("pointermove", function (e) {
+    if (e.pointerType !== "mouse") return;
+    var r = holder.getBoundingClientRect();
+    glow.tx = e.clientX - r.left; glow.ty = e.clientY - r.top;
+    if (!glow.placed) { glow.x = glow.tx; glow.y = glow.ty; glow.placed = true; }
+    // Fade in on the first movement inside the hero (also covers a cursor already resting there).
+    if (!glow.on) { glow.on = true; gsap.to(puff, { opacity: 1, duration: 1.2, ease: "power2.out", overwrite: true }); }
+  }, { passive: true });
+  section.addEventListener("pointerleave", function () {
+    glow.on = false;
+    gsap.to(puff, { opacity: 0, duration: 1.2, ease: "power2.inOut", overwrite: true });
+  });
+  function drawPuff() {
+    if (!S.puffStrength) { puff.style.background = "none"; return; }
+    glow.x += (glow.tx - glow.x) * S.puffFollow;
+    glow.y += (glow.ty - glow.y) * S.puffFollow;
+    var a = S.puffStrength, c = function (k) { return "rgba(255,255,255," + (a * k).toFixed(4) + ")"; };
+    puff.style.background = "radial-gradient(" + S.puffSize + "rem circle at " + glow.x.toFixed(1) + "px " + glow.y.toFixed(1) + "px, " +
+      c(1) + " 0%, " + c(0.6) + " 22%, " + c(0.28) + " 45%, " + c(0.08) + " 70%, " + c(0) + " 100%)";
+  }
+
   // Only draw while the hero is on screen.
   var visible = true;
   new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; }).observe(holder);
@@ -158,6 +196,7 @@ export function start(opts) {
     key.position.set(S.keyPosition[0] + now.x * S.lightFollow, S.keyPosition[1] - now.y * S.lightFollow * 0.5, S.keyPosition[2]);
     ambient.intensity = S.ambient; front.intensity = S.front; key.intensity = S.key;
     renderer.render(scene, camera);
+    if (glow.placed) drawPuff();
   }
   renderer.render(scene, camera);
   gsap.ticker.add(frame);
