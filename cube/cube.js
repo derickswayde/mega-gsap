@@ -28,7 +28,7 @@ export var settings = {
   driftSeconds: 9,
   fadeIn: 0.8,            // seconds for the cube to take over from the still image
   puffSize: 30,           // rem: radius of the soft glow that follows the cursor over the cube
-  puffStrength: 0.12,     // white opacity at its centre (0 turns it off); Derick, 20 November 2026
+  puffStrength: 0.16,     // white opacity at its centre (0 turns it off); Derick, 20 November 2026
   puffFollow: 0.08,       // how quickly the glow catches up with the cursor
 };
 
@@ -82,7 +82,7 @@ export function start(opts) {
   var puff = document.createElement("div");
   puff.setAttribute("aria-hidden", "true");
   puff.className = "hero_art_puff";
-  var puffMask = "linear-gradient(to bottom, #000 55%, transparent 100%)";
+  var puffMask = "linear-gradient(to bottom, #000 75%, transparent 100%)";  // fades only in the hero's last quarter
   Object.assign(puff.style, {
     position: "absolute", inset: "0", pointerEvents: "none", opacity: "0", mixBlendMode: "screen",
     maskImage: puffMask, webkitMaskImage: puffMask,
@@ -177,7 +177,7 @@ export function start(opts) {
     glow.y += (glow.ty - glow.y) * S.puffFollow;
     var a = S.puffStrength, c = function (k) { return "rgba(255,255,255," + (a * k).toFixed(4) + ")"; };
     puff.style.background = "radial-gradient(" + S.puffSize + "rem circle at " + glow.x.toFixed(1) + "px " + glow.y.toFixed(1) + "px, " +
-      c(1) + " 0%, " + c(0.6) + " 22%, " + c(0.28) + " 45%, " + c(0.08) + " 70%, " + c(0) + " 100%)";
+      c(1) + " 0%, " + c(0.75) + " 25%, " + c(0.4) + " 50%, " + c(0.12) + " 75%, " + c(0) + " 100%)";
   }
 
   // Only draw while the hero is on screen.
