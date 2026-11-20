@@ -657,8 +657,132 @@
         tl2.to(letters, { y: 0, duration: small ? 0.9 : 1.2, ease: EASE, stagger: small ? 0.08 : 0.11, clearProps: "transform" }, 0);
       }
       if (on(bottom)) tl2.to(bottom, fadeUp(bottom), letters.length ? 0.6 : 0);
+      if (letters.length) tl2.add(function () { knockout(logo); });
       onScroll(logo || bottom, tl2, reveal.cardStart);
+    } else if (on(logo)) {
+      knockout(logo);
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // Footer wordmark pixel knockout. The pointer punches square holes out of the letters on the logo's own block
+  // grid (a cell is half an M step: 2.381 of the logo's 92 × 20 units, about 35px at 1440). Holes appear at
+  // once and grow back one by one after the pointer moves on, so a trail of missing pixels follows it and heals.
+  // Done inside the SVG with a <mask> (white = letters shown, black cells = holes). Fine pointers only; touch
+  // devices get a one-off pixel sweep instead, once the wordmark has built. Reduced motion: nothing (whole
+  // script is off).
+  // ─────────────────────────────────────────────
+  var knock = {
+    cell: 4.76217 / 2,  // logo units: half an M step
+    radius: 1,          // cells whose centre is within this many cells of the pointer are knocked out (1 = a plus)
+    hold: 0.6,          // seconds a hole stays after the pointer leaves it
+    jitter: 0.25,       // extra random hold, so cells heal one by one rather than in a block
+    heal: 0.3,          // seconds for a cell to grow back
+  };
+  var knockId = 0;
+
+  function knockout(logo) {
+    var svg = logo && logo.querySelector("svg");
+    if (!svg || svg.getAttribute("data-knockout")) return;
+    var vb = svg.viewBox && svg.viewBox.baseVal;
+    if (!vb || !vb.width) return;
+    svg.setAttribute("data-knockout", "on");
+
+    // <mask>: a white sheet, with black cells added as holes. The letters move into a group that uses it.
+    var id = CONFIG.name + "-knockout-" + ++knockId;
+    var defs = document.createElementNS(SVGNS, "defs");
+    var mask = document.createElementNS(SVGNS, "mask");
+    mask.setAttribute("id", id);
+    mask.setAttribute("maskUnits", "userSpaceOnUse");
+    ["x", "y", "width", "height"].forEach(function (k, i) { mask.setAttribute(k, [vb.x - 1, vb.y - 1, vb.width + 2, vb.height + 2][i]); });
+    var sheet = document.createElementNS(SVGNS, "rect");
+    ["x", "y", "width", "height"].forEach(function (k, i) { sheet.setAttribute(k, [vb.x - 1, vb.y - 1, vb.width + 2, vb.height + 2][i]); });
+    // Lumos styles every shape inside .u-icon with fill: currentColor, which would turn the mask white; force the mask fills.
+    sheet.style.setProperty("fill", "#fff", "important");
+    mask.appendChild(sheet);
+    defs.appendChild(mask);
+    var group = document.createElementNS(SVGNS, "g");
+    group.setAttribute("mask", "url(#" + id + ")");
+    Array.prototype.slice.call(svg.children).forEach(function (child) { if (child.tagName.toLowerCase() !== "defs") group.appendChild(child); });
+    svg.appendChild(defs);
+    svg.appendChild(group);
+
+    var size = knock.cell;
+    var cols = Math.ceil(vb.width / size), rows = Math.ceil(vb.height / size);
+    var holes = new Map();
+
+    function punch(c, r, hold) {
+      if (c < 0 || r < 0 || c >= cols || r >= rows) return;
+      var key = c + ":" + r;
+      var hole = holes.get(key);
+      if (!hole) {
+        var rect = document.createElementNS(SVGNS, "rect");
+        // About 1.5px larger than the cell on every side: no anti-aliased seams between holes, and no slivers where a letter edge sits just off the cell grid (the G bar at 7.06 vs a row at 7.14).
+        var bleed = 0.1;
+        rect.setAttribute("x", vb.x + c * size - bleed);
+        rect.setAttribute("y", vb.y + r * size - bleed);
+        rect.setAttribute("width", size + bleed * 2);
+        rect.setAttribute("height", size + bleed * 2);
+        rect.style.setProperty("fill", "#000", "important");
+        mask.appendChild(rect);
+        hole = { rect: rect, tween: null };
+        holes.set(key, hole);
+      }
+      if (hole.tween) hole.tween.kill();
+      gsap.set(hole.rect, { scale: 1, transformOrigin: "50% 50%" });
+      hole.tween = gsap.to(hole.rect, {
+        scale: 0, duration: knock.heal, ease: "power2.in",
+        delay: hold + Math.random() * knock.jitter,
+        onComplete: function () { hole.rect.remove(); holes.delete(key); },
+      });
+    }
+
+    // Every cell within `radius` of a point (in logo units).
+    function brush(x, y, hold) {
+      var cx = x / size, cy = y / size, rad = knock.radius;
+      for (var c = Math.floor(cx - rad); c <= Math.floor(cx + rad); c++) {
+        for (var r = Math.floor(cy - rad); r <= Math.floor(cy + rad); r++) {
+          var dx = c + 0.5 - cx, dy = r + 0.5 - cy;
+          if (dx * dx + dy * dy <= (rad + 0.5) * (rad + 0.5)) punch(c, r, hold);
+        }
+      }
+    }
+
+    var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    if (!finePointer) {
+      // One-off sweep: a ragged band of holes crosses the wordmark left to right and heals behind it.
+      for (var c = 0; c < cols; c++) {
+        for (var r = 0; r < rows; r++) {
+          if (Math.random() < 0.7) gsap.delayedCall(c * 0.03 + Math.random() * 0.08, punch, [c, r, 0.15]);
+        }
+      }
+      return;
+    }
+
+    var last = null, pending = null, frame = 0;
+    function toLogo(e) {
+      var ctm = svg.getScreenCTM();
+      if (!ctm) return null;
+      var pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      return { x: pt.x - vb.x, y: pt.y - vb.y };
+    }
+    function paint() {
+      frame = 0;
+      var p = pending;
+      if (!p) return;
+      // Fill the gap since the last frame, so a fast flick leaves an unbroken (and longer) trail.
+      var steps = last ? Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / (size * 0.5))) : 1;
+      for (var i = 1; i <= steps; i++) {
+        var t = i / steps;
+        brush(last ? last.x + (p.x - last.x) * t : p.x, last ? last.y + (p.y - last.y) * t : p.y, knock.hold);
+      }
+      last = p;
+    }
+    logo.addEventListener("pointermove", function (e) {
+      pending = toLogo(e);
+      if (!frame) frame = requestAnimationFrame(paint);
+    });
+    logo.addEventListener("pointerleave", function () { last = null; pending = null; });
   }
 
   // ─────────────────────────────────────────────
