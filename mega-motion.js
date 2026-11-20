@@ -665,19 +665,28 @@
   }
 
   // ─────────────────────────────────────────────
-  // Footer wordmark pixel knockout. The pointer punches square holes out of the letters on the logo's own block
-  // grid (a cell is half an M step: 2.381 of the logo's 92 × 20 units, about 35px at 1440). Holes appear at
-  // once and grow back one by one after the pointer moves on, so a trail of missing pixels follows it and heals.
-  // Done inside the SVG with a <mask> (white = letters shown, black cells = holes). Fine pointers only; touch
-  // devices get a one-off pixel sweep instead, once the wordmark has built. Reduced motion: nothing (whole
-  // script is off).
+  // Footer wordmark pixel knockout, the quiet version (Derick, 20 November 2026: the first cut felt "gamey").
+  // The wordmark dissolves on its own block grid around the pointer (a cell is half an M step: 2.381 of the
+  // logo's 92 × 20 units, about 35px at 1440). A soft brush: the cell under the pointer clears, its neighbours
+  // only partly, falling off with distance. Cells fade out quickly and settle back slowly on a soft ease, and the
+  // brush trails the pointer with a little lag (like the hero puff), so the trail flows rather than twitches.
+  // Done inside the SVG with a <mask> (white = letters shown, darker grey cells = more cleared). Fine pointers only;
+  // touch devices get one soft diagonal pass, lower left to upper right (the staircase direction), after the
+  // wordmark has built. Reduced motion: nothing (whole script is off).
   // ─────────────────────────────────────────────
   var knock = {
     cell: 4.76217 / 2,  // logo units: half an M step
-    radius: 1,          // cells whose centre is within this many cells of the pointer are knocked out (1 = a plus)
-    hold: 0.6,          // seconds a hole stays after the pointer leaves it
-    jitter: 0.25,       // extra random hold, so cells heal one by one rather than in a block
-    heal: 0.3,          // seconds for a cell to grow back
+    radius: 1.6,        // brush reach in cells; strength falls off with distance
+    peak: 1,            // strength at the brush centre (1 = fully cleared)
+    floor: 0.08,        // cells fainter than this aren't touched
+    follow: 0.16,       // how quickly the brush catches the pointer each frame (lower = smoother, more lag)
+    fadeIn: 0.2,        // seconds for a cell to clear
+    hold: 0.25,         // seconds it stays cleared after the brush moves on
+    jitter: 0.12,       // extra random hold, so cells settle back one by one, gently
+    heal: 1.2,          // seconds for a cell to settle back
+    sweep: 0.5,         // touch: strength of the diagonal pass
+    sweepStep: 0.05,    // touch: seconds between columns (about 2s across the wordmark)
+    sweepHeal: 0.4,     // touch: seconds for each cell to settle back (short, so the pass travels as a narrow band)
   };
   var knockId = 0;
 
@@ -688,7 +697,7 @@
     if (!vb || !vb.width) return;
     svg.setAttribute("data-knockout", "on");
 
-    // <mask>: a white sheet, with black cells added as holes. The letters move into a group that uses it.
+    // <mask>: a white sheet, with dark cells added over it. The letters move into a group that uses it.
     var id = CONFIG.name + "-knockout-" + ++knockId;
     var defs = document.createElementNS(SVGNS, "defs");
     var mask = document.createElementNS(SVGNS, "mask");
@@ -709,80 +718,90 @@
 
     var size = knock.cell;
     var cols = Math.ceil(vb.width / size), rows = Math.ceil(vb.height / size);
-    var holes = new Map();
+    var cells = new Map();
 
-    function punch(c, r, hold) {
-      if (c < 0 || r < 0 || c >= cols || r >= rows) return;
+    // Clear a cell to at least `strength` (0–1), hold, then let it settle back (over `heal` seconds, default knock.heal).
+    function touch(c, r, strength, hold, heal) {
+      if (c < 0 || r < 0 || c >= cols || r >= rows || strength < knock.floor) return;
       var key = c + ":" + r;
-      var hole = holes.get(key);
-      if (!hole) {
+      var cell = cells.get(key);
+      if (!cell) {
         var rect = document.createElementNS(SVGNS, "rect");
-        // About 1.5px larger than the cell on every side: no anti-aliased seams between holes, and no slivers where a letter edge sits just off the cell grid (the G bar at 7.06 vs a row at 7.14).
-        var bleed = 0.1;
+        // Each cell is an opaque grey (white = letter shown, black = cleared), never a translucent black: overlapping
+        // translucent cells darken where they meet and show a grid. Opaque cells can overlap a hair (bleed, about
+        // 0.7px at 1440) to close anti-aliased seams, because the later one simply paints over the earlier one.
+        var bleed = 0.05;
         rect.setAttribute("x", vb.x + c * size - bleed);
         rect.setAttribute("y", vb.y + r * size - bleed);
         rect.setAttribute("width", size + bleed * 2);
         rect.setAttribute("height", size + bleed * 2);
-        rect.style.setProperty("fill", "#000", "important");
         mask.appendChild(rect);
-        hole = { rect: rect, tween: null };
-        holes.set(key, hole);
+        cell = { rect: rect, v: 0, tl: null };
+        cell.paint = function () {
+          var g = Math.round(255 * (1 - cell.v));
+          cell.rect.style.setProperty("fill", "rgb(" + g + "," + g + "," + g + ")", "important");
+        };
+        cell.paint();
+        cells.set(key, cell);
       }
-      if (hole.tween) hole.tween.kill();
-      gsap.set(hole.rect, { scale: 1, transformOrigin: "50% 50%" });
-      hole.tween = gsap.to(hole.rect, {
-        scale: 0, duration: knock.heal, ease: "power2.in",
-        delay: hold + Math.random() * knock.jitter,
-        onComplete: function () { hole.rect.remove(); holes.delete(key); },
-      });
+      var now = cell.v;
+      var target = Math.max(now, strength);
+      if (cell.tl) cell.tl.kill();
+      cell.tl = gsap.timeline({ onUpdate: cell.paint, onComplete: function () { cell.rect.remove(); cells.delete(key); } })
+        .to(cell, { v: target, duration: target > now ? knock.fadeIn : 0.001, ease: "power2.out" })
+        .to(cell, { v: 0, duration: heal || knock.heal, ease: "power2.inOut" }, "+=" + (hold + Math.random() * knock.jitter));
     }
 
-    // Every cell within `radius` of a point (in logo units).
-    function brush(x, y, hold) {
-      var cx = x / size, cy = y / size, rad = knock.radius;
-      for (var c = Math.floor(cx - rad); c <= Math.floor(cx + rad); c++) {
-        for (var r = Math.floor(cy - rad); r <= Math.floor(cy + rad); r++) {
-          var dx = c + 0.5 - cx, dy = r + 0.5 - cy;
-          if (dx * dx + dy * dy <= (rad + 0.5) * (rad + 0.5)) punch(c, r, hold);
+    // Soft brush around a point (in logo units): full at the centre, falling off with distance.
+    function brush(x, y) {
+      var cx = x / size, cy = y / size, reach = knock.radius + 0.5;
+      for (var c = Math.floor(cx - reach); c <= Math.floor(cx + reach); c++) {
+        for (var r = Math.floor(cy - reach); r <= Math.floor(cy + reach); r++) {
+          var d = Math.hypot(c + 0.5 - cx, r + 0.5 - cy) / reach;
+          if (d < 1) touch(c, r, knock.peak * Math.pow(1 - d, 1.5), knock.hold);
         }
       }
     }
 
     var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     if (!finePointer) {
-      // One-off sweep: a ragged band of holes crosses the wordmark left to right and heals behind it.
+      // One soft diagonal pass, lower left first, in the staircase direction.
       for (var c = 0; c < cols; c++) {
         for (var r = 0; r < rows; r++) {
-          if (Math.random() < 0.7) gsap.delayedCall(c * 0.03 + Math.random() * 0.08, punch, [c, r, 0.15]);
+          gsap.delayedCall((c + (rows - 1 - r) * 0.8) * knock.sweepStep, touch, [c, r, knock.sweep, 0, knock.sweepHeal]);
         }
       }
       return;
     }
 
-    var last = null, pending = null, frame = 0;
+    var target = null, brushAt = null, running = false;
     function toLogo(e) {
       var ctm = svg.getScreenCTM();
       if (!ctm) return null;
       var pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
       return { x: pt.x - vb.x, y: pt.y - vb.y };
     }
-    function paint() {
-      frame = 0;
-      var p = pending;
-      if (!p) return;
-      // Fill the gap since the last frame, so a fast flick leaves an unbroken (and longer) trail.
-      var steps = last ? Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / (size * 0.5))) : 1;
+    function tick() {
+      if (!target || !brushAt) return stop();
+      var next = { x: brushAt.x + (target.x - brushAt.x) * knock.follow, y: brushAt.y + (target.y - brushAt.y) * knock.follow };
+      // Fill the gap since the last frame, so the trail stays unbroken.
+      var steps = Math.max(1, Math.ceil(Math.hypot(next.x - brushAt.x, next.y - brushAt.y) / (size * 0.5)));
       for (var i = 1; i <= steps; i++) {
         var t = i / steps;
-        brush(last ? last.x + (p.x - last.x) * t : p.x, last ? last.y + (p.y - last.y) * t : p.y, knock.hold);
+        brush(brushAt.x + (next.x - brushAt.x) * t, brushAt.y + (next.y - brushAt.y) * t);
       }
-      last = p;
+      brushAt = next;
+      // Once the brush has caught up (pointer resting, or gone), it stops and the wordmark settles back.
+      if (Math.hypot(target.x - brushAt.x, target.y - brushAt.y) < size * 0.1) stop();
     }
-    logo.addEventListener("pointermove", function (e) {
-      pending = toLogo(e);
-      if (!frame) frame = requestAnimationFrame(paint);
+    function start() { if (!running) { running = true; gsap.ticker.add(tick); } }
+    function stop() { if (running) { running = false; gsap.ticker.remove(tick); } }
+    logo.addEventListener("pointerenter", function (e) {
+      target = toLogo(e);
+      if (!running) brushAt = target;
+      start();
     });
-    logo.addEventListener("pointerleave", function () { last = null; pending = null; });
+    logo.addEventListener("pointermove", function (e) { target = toLogo(e); if (!brushAt) brushAt = target; start(); });
   }
 
   // ─────────────────────────────────────────────
