@@ -666,8 +666,8 @@
 
   // ─────────────────────────────────────────────
   // Footer wordmark pixel knockout, the quiet version (Derick, 20 November 2026: the first cut felt "gamey").
-  // The wordmark dissolves on its own block grid around the pointer (a cell is a third of an M step: 1.587 of
-  // the logo's 92 × 20 units, about 23px at 1440). A soft brush: the cell under the pointer clears, its neighbours
+  // The wordmark dissolves on its own pixel grid around the pointer (about 17px cells at 1440; each letter's grid
+  // is fitted to its own edges, so the pixels always line up with the letter). A soft brush: the cell under the pointer clears, its neighbours
   // only partly, falling off with distance. Cells fade out quickly and settle back slowly on a soft ease, and the
   // brush trails the pointer with a little lag (like the hero puff), so the trail flows rather than twitches.
   // Done inside the SVG with a <mask> (white = letters shown, darker grey cells = more cleared). Fine pointers only;
@@ -675,8 +675,8 @@
   // wordmark has built. Reduced motion: nothing (whole script is off).
   // ─────────────────────────────────────────────
   var knock = {
-    cell: 4.76217 / 3,  // logo units: a third of an M step (about 23px at 1440; was half a step, 35px)
-    radius: 2.4,        // brush reach in cells (same size on screen as 1.6 half-step cells); strength falls off with distance
+    cell: 1.15,         // target cell in logo units: half the letters' stroke module (~2.3), about 17px at 1440
+    radius: 3.5,        // brush reach in cells (same size on screen as before, about 68px); strength falls off with distance
     peak: 1,            // strength at the brush centre (1 = fully cleared)
     floor: 0.08,        // cells fainter than this aren't touched
     follow: 0.16,       // how quickly the brush catches the pointer each frame (lower = smoother, more lag)
@@ -685,7 +685,7 @@
     jitter: 0.12,       // extra random hold, so cells settle back one by one, gently
     heal: 1.2,          // seconds for a cell to settle back
     sweep: 0.5,         // touch: strength of the diagonal pass
-    sweepStep: 0.034,   // touch: seconds between columns (about 2s across the wordmark)
+    sweepStep: 0.024,   // touch: seconds per cell width travelled (about 2s across the wordmark)
     sweepHeal: 0.4,     // touch: seconds for each cell to settle back (short, so the pass travels as a narrow band)
   };
   var knockId = 0;
@@ -716,49 +716,116 @@
     svg.appendChild(defs);
     svg.appendChild(group);
 
+    // Each letter gets its own grid, built from its own edges: every horizontal and vertical edge of the letter
+    // is a grid line, and the span between two edges is split into near-square cells of about knock.cell. So cells
+    // always line up with the letter and with each other; there are no slivers or overhangs at letter edges.
+    // (One even grid across the wordmark can't do this: the letters' edges don't share a grid.)
     var size = knock.cell;
-    var cols = Math.ceil(vb.width / size), rows = Math.ceil(vb.height / size);
-    var cells = new Map();
+    var list = [], buckets = new Map();
+
+    // Edges of a path drawn only with straight horizontal and vertical lines (the Mega letters). null otherwise.
+    function edgesOf(d) {
+      var xs = [], ys = [], x = 0, y = 0, sx = 0, sy = 0, ok = true;
+      (d.match(/[MmLlHhVvZz][^MmLlHhVvZz]*/g) || []).forEach(function (seg) {
+        var cmd = seg[0], up = cmd.toUpperCase(), rel = cmd !== up;
+        var n = (seg.slice(1).match(/-?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/gi) || []).map(Number);
+        if (up === "M" || up === "L") {
+          for (var i = 0; i + 1 < n.length; i += 2) {
+            x = rel ? x + n[i] : n[i]; y = rel ? y + n[i + 1] : n[i + 1];
+            if (up === "M" && i === 0) { sx = x; sy = y; }
+            xs.push(x); ys.push(y);
+          }
+        } else if (up === "H") {
+          n.forEach(function (v) { x = rel ? x + v : v; xs.push(x); });
+        } else if (up === "V") {
+          n.forEach(function (v) { y = rel ? y + v : v; ys.push(y); });
+        } else if (up === "Z") {
+          x = sx; y = sy;
+        } else {
+          ok = false;
+        }
+      });
+      if (/[^MmLlHhVvZz\d\s.,eE+-]/.test(d)) ok = false; // curves or arcs: not straight-edged
+      return ok && xs.length && ys.length ? { xs: xs, ys: ys } : null;
+    }
+
+    // Grid lines for one axis: the letter's edges, with each span split into near-square steps.
+    function lines(edges) {
+      var e = edges.slice().sort(function (a, b) { return a - b; }).filter(function (v, i, a) { return i === 0 || v - a[i - 1] > 0.01; });
+      var out = [e[0]];
+      for (var i = 1; i < e.length; i++) {
+        var span = e[i] - e[i - 1], k = Math.max(1, Math.round(span / size));
+        for (var j = 1; j <= k; j++) out.push(e[i - 1] + (span * j) / k);
+      }
+      return out;
+    }
+
+    Array.prototype.forEach.call(group.querySelectorAll("path"), function (path) {
+      var ed = edgesOf(path.getAttribute("d") || "");
+      var gx, gy;
+      if (ed) {
+        gx = lines(ed.xs); gy = lines(ed.ys);
+      } else {
+        // Not a straight-edged shape: an even grid over its box.
+        var b = path.getBBox(), nx = Math.max(1, Math.round(b.width / size)), ny = Math.max(1, Math.round(b.height / size));
+        gx = []; gy = [];
+        for (var a = 0; a <= nx; a++) gx.push(b.x + (b.width * a) / nx);
+        for (var c = 0; c <= ny; c++) gy.push(b.y + (b.height * c) / ny);
+      }
+      for (var i = 0; i + 1 < gx.length; i++) {
+        for (var j = 0; j + 1 < gy.length; j++) {
+          var cx = (gx[i] + gx[i + 1]) / 2, cy = (gy[j] + gy[j + 1]) / 2;
+          // Only cells the letter actually covers (cells over its counters or gaps would do nothing).
+          if (path.isPointInFill && !path.isPointInFill(new DOMPoint(cx, cy))) continue;
+          var cell = { x: gx[i], y: gy[j], w: gx[i + 1] - gx[i], h: gy[j + 1] - gy[j], cx: cx, cy: cy, v: 0, rect: null, tl: null };
+          list.push(cell);
+          var key = Math.floor(cx / size) + ":" + Math.floor(cy / size);
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(cell);
+        }
+      }
+    });
 
     // Clear a cell to at least `strength` (0–1), hold, then let it settle back (over `heal` seconds, default knock.heal).
-    function touch(c, r, strength, hold, heal) {
-      if (c < 0 || r < 0 || c >= cols || r >= rows || strength < knock.floor) return;
-      var key = c + ":" + r;
-      var cell = cells.get(key);
-      if (!cell) {
+    function touch(cell, strength, hold, heal) {
+      if (strength < knock.floor) return;
+      if (!cell.rect) {
         var rect = document.createElementNS(SVGNS, "rect");
         // Each cell is an opaque grey (white = letter shown, black = cleared), never a translucent black: overlapping
         // translucent cells darken where they meet and show a grid. Opaque cells can overlap a hair (bleed, about
         // 0.7px at 1440) to close anti-aliased seams, because the later one simply paints over the earlier one.
         var bleed = 0.05;
-        rect.setAttribute("x", vb.x + c * size - bleed);
-        rect.setAttribute("y", vb.y + r * size - bleed);
-        rect.setAttribute("width", size + bleed * 2);
-        rect.setAttribute("height", size + bleed * 2);
+        rect.setAttribute("x", cell.x - bleed);
+        rect.setAttribute("y", cell.y - bleed);
+        rect.setAttribute("width", cell.w + bleed * 2);
+        rect.setAttribute("height", cell.h + bleed * 2);
         mask.appendChild(rect);
-        cell = { rect: rect, v: 0, tl: null };
-        cell.paint = function () {
-          var g = Math.round(255 * (1 - cell.v));
-          cell.rect.style.setProperty("fill", "rgb(" + g + "," + g + "," + g + ")", "important");
-        };
-        cell.paint();
-        cells.set(key, cell);
+        cell.rect = rect;
+        cell.v = 0;
       }
+      var paint = function () {
+        var g = Math.round(255 * (1 - cell.v));
+        cell.rect.style.setProperty("fill", "rgb(" + g + "," + g + "," + g + ")", "important");
+      };
       var now = cell.v;
       var target = Math.max(now, strength);
       if (cell.tl) cell.tl.kill();
-      cell.tl = gsap.timeline({ onUpdate: cell.paint, onComplete: function () { cell.rect.remove(); cells.delete(key); } })
+      cell.tl = gsap.timeline({ onUpdate: paint, onComplete: function () { cell.rect.remove(); cell.rect = null; cell.tl = null; } })
         .to(cell, { v: target, duration: target > now ? knock.fadeIn : 0.001, ease: "power2.out" })
         .to(cell, { v: 0, duration: heal || knock.heal, ease: "power2.inOut" }, "+=" + (hold + Math.random() * knock.jitter));
     }
 
-    // Soft brush around a point (in logo units): full at the centre, falling off with distance.
+    // Soft brush around a point (logo units, from the viewBox origin): full at the centre, falling off with distance.
     function brush(x, y) {
-      var cx = x / size, cy = y / size, reach = knock.radius + 0.5;
-      for (var c = Math.floor(cx - reach); c <= Math.floor(cx + reach); c++) {
-        for (var r = Math.floor(cy - reach); r <= Math.floor(cy + reach); r++) {
-          var d = Math.hypot(c + 0.5 - cx, r + 0.5 - cy) / reach;
-          if (d < 1) touch(c, r, knock.peak * Math.pow(1 - d, 1.5), knock.hold);
+      var px = x + vb.x, py = y + vb.y, reach = (knock.radius + 0.5) * size;
+      for (var bx = Math.floor((px - reach) / size); bx <= Math.floor((px + reach) / size); bx++) {
+        for (var by = Math.floor((py - reach) / size); by <= Math.floor((py + reach) / size); by++) {
+          var bucket = buckets.get(bx + ":" + by);
+          if (!bucket) continue;
+          for (var k = 0; k < bucket.length; k++) {
+            var cell = bucket[k], d = Math.hypot(cell.cx - px, cell.cy - py) / reach;
+            if (d < 1) touch(cell, knock.peak * Math.pow(1 - d, 1.5), knock.hold);
+          }
         }
       }
     }
@@ -766,11 +833,10 @@
     var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     if (!finePointer) {
       // One soft diagonal pass, lower left first, in the staircase direction.
-      for (var c = 0; c < cols; c++) {
-        for (var r = 0; r < rows; r++) {
-          gsap.delayedCall((c + (rows - 1 - r) * 0.8) * knock.sweepStep, touch, [c, r, knock.sweep, 0, knock.sweepHeal]);
-        }
-      }
+      list.forEach(function (cell) {
+        var at = ((cell.cx - vb.x) / size + ((vb.y + vb.height - cell.cy) / size) * 0.8) * knock.sweepStep;
+        gsap.delayedCall(at, touch, [cell, knock.sweep, 0, knock.sweepHeal]);
+      });
       return;
     }
 
