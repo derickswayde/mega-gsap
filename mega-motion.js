@@ -344,6 +344,74 @@
   }
 
   // ─────────────────────────────────────────────
+  // Step wipe (Mega's signature): the element is uncovered by three columns rising from the bottom,
+  // the right column leading, so the moving edge is the M's own staircase (low left, high right).
+  // Returns a paused tween. Rounded corners come from the element's children, so the polygon is safe.
+  // ─────────────────────────────────────────────
+  function stepClip(t) {
+    // t runs 0 → 1 + 2/3. Column i (0 = left) has risen t − (2 − i)/3 of the height.
+    var h = [0, 1, 2].map(function (i) { return Math.max(0, Math.min(1, t - (2 - i) / 3)); });
+    var top = function (k) { return (100 - h[k] * 100).toFixed(2) + "%"; };
+    return "polygon(0% 100%, 0% " + top(0) + ", 33.34% " + top(0) + ", 33.34% " + top(1) + ", 66.67% " + top(1) +
+      ", 66.67% " + top(2) + ", 100% " + top(2) + ", 100% 100%)";
+  }
+
+  function stepWipe(el, opts) {
+    var p = { t: 0 };
+    gsap.set(el, { clipPath: stepClip(0) });
+    return gsap.to(p, {
+      t: 1 + 2 / 3,
+      duration: opts.duration,
+      ease: EASE,
+      paused: true,
+      onUpdate: function () { el.style.clipPath = stepClip(p.t); },
+      onComplete: function () { gsap.set(el, { clearProps: "clipPath" }); if (opts.done) opts.done(); },
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // Companies: each row of company cards step-wipes in as it arrives, left card first.
+  // The photo settles inside the wipe; then the card's logo reveal is allowed (logo-reveals/init.js waits for data-wipe).
+  // ─────────────────────────────────────────────
+  function companies() {
+    var cards = Array.prototype.filter.call(document.querySelectorAll(".card_company_wrap"), on);
+    if (!cards.length || !window.ScrollTrigger) return;
+
+    // Rows by their top edge (a 2 × 2 grid on desktop, one per row on phones).
+    var rows = [];
+    cards.forEach(function (c) {
+      var top = Math.round(c.getBoundingClientRect().top + window.scrollY);
+      var row = rows.find(function (r) { return Math.abs(r.top - top) < 8; });
+      if (row) row.cards.push(c); else rows.push({ top: top, cards: [c] });
+    });
+
+    var dur = small ? 0.9 : 1.3, rise = small ? 20 : 40;
+    rows.forEach(function (row) {
+      row.cards.sort(function (a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
+      var tl = gsap.timeline({ paused: true });
+      row.cards.forEach(function (card, i) {
+        var media = card.querySelector(".u-image-wrapper");
+        card.setAttribute("data-wipe", "pending");
+        gsap.set(card, { y: rise });
+        if (media) gsap.set(media, { scale: 1.08 });
+        var at = i * (small ? 0.1 : 0.16);
+        var wipe = stepWipe(card, {
+          duration: dur,
+          done: function () {
+            card.setAttribute("data-wipe", "done");
+            card.dispatchEvent(new CustomEvent("mega:wiped", { bubbles: true }));
+          },
+        });
+        tl.add(function () { wipe.play(); }, at);
+        tl.to(card, { y: 0, duration: dur, ease: EASE, clearProps: "transform" }, at);
+        if (media) tl.to(media, { scale: 1, duration: dur + 0.4, ease: "power2.out", clearProps: "transform" }, at);
+      });
+      // A row already in view on load waits for the hero to land, so it never competes with the cube's entrance.
+      onScroll(row.cards[0], { play: function () { heroArt.then(function () { tl.play(); }); } }, reveal.cardStart);
+    });
+  }
+
+  // ─────────────────────────────────────────────
   // Section reveals (on scroll), shared by every section.
   // Picked up from the Lumos classes already on the page; data-motion="off" opts out.
   // ─────────────────────────────────────────────
@@ -545,6 +613,11 @@
       }
       try { heroCube(); } catch (e) {
         console.error("[" + CONFIG.name + "-motion] cube", e);
+      }
+      try { companies(); } catch (e) {
+        gsap.set(".card_company_wrap, .card_company_wrap *", { clearProps: "all" });
+        document.querySelectorAll(".card_company_wrap").forEach(function (c) { c.setAttribute("data-wipe", "done"); });
+        console.error("[" + CONFIG.name + "-motion] companies", e);
       }
       sections();
     }
